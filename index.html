@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Hà Nội Food Roulette 3D — Ăn Gì Phố Cổ?</title>
+  <title>Vị Hà Nội — Cỗ Máy Định Vị Ẩm Thực 3D</title>
 
-  <!-- Typography: Syne (Tiêu đề phá cách) & Be Vietnam Pro (Chuẩn tiếng Việt sắc nét) -->
+  <!-- Typography chuẩn tiếng Việt: Plus Jakarta Sans (Tiêu đề cao cấp) & Be Vietnam Pro (Nội dung chuẩn) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Syne:wght@700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
 
   <!-- Thư viện Three.js CDN & Confetti -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -16,32 +16,38 @@
 
   <style>
     :root {
-      --bg: #090d16;
-      --card-bg: rgba(22, 29, 47, 0.72);
+      --bg: #07090e;
+      --card-bg: rgba(16, 21, 34, 0.75);
       --card-border: rgba(255, 255, 255, 0.08);
-      --accent-neon: #ff5e36;
-      --accent-gradient: linear-gradient(135deg, #ff416c 0%, #ff4b2b 50%, #f9d423 100%);
-      --emerald: #10b981;
+      --card-hover-border: rgba(255, 107, 43, 0.35);
+      --accent: #ff4b2b;
+      --accent-gradient: linear-gradient(135deg, #ff416c 0%, #ff4b2b 60%, #f59e0b 100%);
       --gold: #f59e0b;
+      --emerald: #10b981;
       --text-main: #f8fafc;
       --text-muted: #94a3b8;
-      --glow: 0 0 35px rgba(255, 75, 43, 0.4);
     }
 
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-family: 'Be Vietnam Pro', sans-serif;
+      font-family: 'Be Vietnam Pro', -apple-system, sans-serif;
       -webkit-tap-highlight-color: transparent;
+    }
+
+    h1, h2, h3, h4, .brand-title, .btn-spin-label {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 800;
+      letter-spacing: -0.02em;
     }
 
     body {
       background-color: var(--bg);
       background-image: 
-        radial-gradient(at 0% 0%, rgba(255, 75, 43, 0.15) 0px, transparent 50%),
-        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.12) 0px, transparent 50%),
-        radial-gradient(at 50% 50%, rgba(15, 23, 42, 0.9) 0px, transparent 100%);
+        radial-gradient(at 0% 0%, rgba(255, 75, 43, 0.12) 0px, transparent 40%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 40%),
+        radial-gradient(at 50% 50%, rgba(15, 23, 42, 0.6) 0px, transparent 100%);
       color: var(--text-main);
       min-height: 100vh;
       overflow-x: hidden;
@@ -54,9 +60,9 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 16px 24px;
+      padding: 16px 28px;
       backdrop-filter: blur(20px);
-      background: rgba(9, 13, 22, 0.75);
+      background: rgba(7, 9, 14, 0.85);
       border-bottom: 1px solid var(--card-border);
       position: sticky;
       top: 0;
@@ -66,89 +72,95 @@
     .brand {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
       text-decoration: none;
     }
 
-    .brand-icon {
-      font-size: 1.8rem;
-      filter: drop-shadow(0 0 10px rgba(255, 94, 54, 0.7));
+    .brand-badge {
+      width: 40px;
+      height: 40px;
+      background: var(--accent-gradient);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      box-shadow: 0 4px 15px rgba(255, 75, 43, 0.35);
     }
 
     .brand-text h1 {
-      font-family: 'Syne', sans-serif;
-      font-weight: 800;
       font-size: 1.25rem;
-      letter-spacing: -0.5px;
-      background: linear-gradient(90deg, #fff 0%, #cbd5e1 100%);
+      line-height: 1.1;
+      background: linear-gradient(90deg, #ffffff 0%, #cbd5e1 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
     .brand-text span {
-      font-size: 0.72rem;
-      color: var(--accent-neon);
+      font-size: 0.7rem;
+      color: var(--accent);
       text-transform: uppercase;
-      letter-spacing: 2px;
+      letter-spacing: 1.5px;
       font-weight: 700;
     }
 
     .nav-actions {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
     }
 
-    .btn-sound {
-      background: rgba(255, 255, 255, 0.06);
+    .btn-nav-action {
+      background: rgba(255, 255, 255, 0.05);
       border: 1px solid var(--card-border);
       color: #fff;
       padding: 8px 14px;
-      border-radius: 40px;
-      font-size: 0.85rem;
+      border-radius: 100px;
+      font-size: 0.82rem;
       font-weight: 600;
       cursor: pointer;
       display: flex;
       align-items: center;
       gap: 6px;
-      transition: all 0.2s;
+      transition: all 0.25s;
     }
 
-    .btn-sound:hover {
-      background: rgba(255, 255, 255, 0.15);
+    .btn-nav-action:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.2);
     }
 
     /* MAIN LAYOUT */
     .app-layout {
-      max-width: 1400px;
+      max-width: 1360px;
       width: 100%;
       margin: 0 auto;
-      padding: 20px 16px 40px;
+      padding: 24px 20px 48px;
       display: grid;
       grid-template-columns: 1fr;
-      gap: 24px;
+      gap: 28px;
       flex: 1;
     }
 
     @media (min-width: 1024px) {
       .app-layout {
-        grid-template-columns: 380px 1fr;
-        padding: 30px 24px;
-        align-items: start;
+        grid-template-columns: 390px 1fr;
+        padding: 32px 28px;
       }
     }
 
-    /* GLASS PANEL */
-    .glass-panel {
+    /* GLASS CARD */
+    .glass-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-radius: 24px;
+      border-radius: 28px;
       padding: 24px;
-      backdrop-filter: blur(24px);
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(28px);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+      transition: border-color 0.3s;
     }
 
-    /* BỘ LỌC */
+    /* BENTO FILTER TABS */
     .filter-header {
       display: flex;
       justify-content: space-between;
@@ -157,28 +169,60 @@
     }
 
     .filter-header h2 {
-      font-family: 'Syne', sans-serif;
-      font-size: 1.35rem;
-      font-weight: 700;
+      font-size: 1.3rem;
+      color: #fff;
     }
 
     .pill-counter {
-      background: rgba(255, 94, 54, 0.15);
-      border: 1px solid rgba(255, 94, 54, 0.4);
-      color: #ff7a59;
+      background: rgba(255, 75, 43, 0.12);
+      border: 1px solid rgba(255, 75, 43, 0.35);
+      color: #ff6b4b;
       padding: 4px 12px;
       border-radius: 30px;
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       font-weight: 700;
     }
 
-    .filter-item {
+    .quick-tags-container {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+      scrollbar-width: none;
+    }
+
+    .quick-tags-container::-webkit-scrollbar {
+      display: none;
+    }
+
+    .filter-chip {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      border-radius: 100px;
+      padding: 6px 14px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .filter-chip.active {
+      background: #ff4b2b;
+      color: #fff;
+      border-color: #ff4b2b;
+      box-shadow: 0 2px 10px rgba(255, 75, 43, 0.4);
+    }
+
+    .filter-group {
       margin-bottom: 18px;
     }
 
-    .filter-item label {
+    .filter-label {
       display: block;
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       font-weight: 700;
       color: var(--text-muted);
       text-transform: uppercase;
@@ -188,19 +232,19 @@
 
     .custom-input, .custom-select {
       width: 100%;
-      background: rgba(13, 19, 33, 0.8);
+      background: rgba(10, 14, 24, 0.85);
       border: 1px solid var(--card-border);
       padding: 12px 16px;
       border-radius: 14px;
       color: #fff;
-      font-size: 0.95rem;
+      font-size: 0.92rem;
       outline: none;
       transition: all 0.25s ease;
     }
 
     .custom-input:focus, .custom-select:focus {
-      border-color: var(--accent-neon);
-      box-shadow: 0 0 15px rgba(255, 94, 54, 0.25);
+      border-color: var(--accent);
+      box-shadow: 0 0 16px rgba(255, 75, 43, 0.25);
     }
 
     .custom-select option {
@@ -212,15 +256,15 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 8px 0;
+      padding: 10px 0;
       cursor: pointer;
     }
 
     .switch {
       position: relative;
       display: inline-block;
-      width: 48px;
-      height: 26px;
+      width: 46px;
+      height: 24px;
     }
 
     .switch input {
@@ -229,7 +273,7 @@
       height: 0;
     }
 
-    .slider {
+    .slider-track {
       position: absolute;
       cursor: pointer;
       inset: 0;
@@ -238,23 +282,23 @@
       transition: .3s;
     }
 
-    .slider:before {
+    .slider-track:before {
       position: absolute;
       content: "";
-      height: 20px;
-      width: 20px;
+      height: 18px;
+      width: 18px;
       left: 3px;
       bottom: 3px;
       background-color: white;
       border-radius: 50%;
-      transition: .3s;
+      transition: .3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    input:checked + .slider {
+    input:checked + .slider-track {
       background: var(--emerald);
     }
 
-    input:checked + .slider:before {
+    input:checked + .slider-track:before {
       transform: translateX(22px);
     }
 
@@ -262,43 +306,42 @@
       width: 100%;
       padding: 12px;
       background: transparent;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
       color: var(--text-muted);
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s;
-      margin-top: 10px;
+      margin-top: 8px;
     }
 
     .btn-reset-filters:hover {
-      background: rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.06);
       color: #fff;
     }
 
-    /* ROULETTE ARENA */
+    /* ROULETTE 3D ARENA */
     .roulette-arena {
       display: flex;
       flex-direction: column;
       align-items: center;
+      justify-content: center;
       position: relative;
     }
 
-    .viewport-3d {
-      width: 100%;
-      height: 480px;
-      max-width: 650px;
+    .viewport-3d-wrapper {
       position: relative;
-      border-radius: 30px;
-      overflow: hidden;
+      width: 100%;
+      max-width: 680px;
+      height: 490px;
       display: flex;
       align-items: center;
       justify-content: center;
     }
 
     @media (max-width: 768px) {
-      .viewport-3d {
+      .viewport-3d-wrapper {
         height: 380px;
       }
     }
@@ -307,31 +350,29 @@
       width: 100%;
       height: 100%;
       display: block;
+      border-radius: 32px;
     }
 
-    /* KIM CHỈ 3D HIỆN ĐẠI */
-    .pointer-pin {
+    /* KIM CHỈ VẬT LÝ CAO CẤP */
+    .wheel-pointer {
       position: absolute;
-      top: 10px;
+      top: 8px;
       left: 50%;
       transform: translateX(-50%);
-      width: 36px;
-      height: 52px;
-      z-index: 20;
+      width: 42px;
+      height: 56px;
+      z-index: 25;
       pointer-events: none;
-      filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6));
+      transform-origin: 50% 12px;
+      filter: drop-shadow(0 6px 14px rgba(0,0,0,0.7));
+      transition: transform 0.06s cubic-bezier(0.2, 0.8, 0.2, 1);
     }
 
-    .pointer-pin svg {
-      width: 100%;
-      height: 100%;
-    }
-
-    /* BIG SPIN BUTTON */
-    .spin-cta-container {
+    /* BIG CTA BUTTON */
+    .spin-controls {
       margin-top: 24px;
       width: 100%;
-      max-width: 440px;
+      max-width: 420px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -340,39 +381,36 @@
 
     .btn-spin-master {
       width: 100%;
-      padding: 20px 32px;
+      padding: 18px 32px;
       background: var(--accent-gradient);
       border: none;
-      border-radius: 50px;
+      border-radius: 100px;
       color: #fff;
-      font-family: 'Syne', sans-serif;
-      font-weight: 800;
-      font-size: 1.4rem;
-      letter-spacing: 1px;
+      font-size: 1.25rem;
       cursor: pointer;
-      box-shadow: 0 10px 35px rgba(255, 75, 43, 0.5), inset 0 2px 4px rgba(255,255,255,0.4);
+      box-shadow: 0 10px 32px rgba(255, 75, 43, 0.45), inset 0 2px 4px rgba(255,255,255,0.4);
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 12px;
+      gap: 10px;
       transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
       position: relative;
       overflow: hidden;
     }
 
     .btn-spin-master:hover:not(:disabled) {
-      transform: translateY(-4px) scale(1.02);
-      box-shadow: 0 16px 45px rgba(255, 75, 43, 0.7);
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 16px 42px rgba(255, 75, 43, 0.65);
     }
 
     .btn-spin-master:active:not(:disabled) {
-      transform: translateY(2px);
+      transform: translateY(1px) scale(0.99);
     }
 
     .btn-spin-master:disabled {
-      opacity: 0.6;
+      opacity: 0.5;
       cursor: not-allowed;
-      filter: grayscale(0.7);
+      filter: grayscale(0.8);
     }
 
     .btn-spin-master::after {
@@ -384,10 +422,10 @@
       height: 200%;
       background: rgba(255, 255, 255, 0.3);
       transform: rotate(25deg);
-      animation: shine 4s infinite linear;
+      animation: sweepShine 3.5s infinite linear;
     }
 
-    @keyframes shine {
+    @keyframes sweepShine {
       0% { left: -60%; }
       20% { left: 140%; }
       100% { left: 140%; }
@@ -397,7 +435,7 @@
     .modal-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(5, 8, 15, 0.88);
+      background: rgba(4, 6, 12, 0.85);
       backdrop-filter: blur(16px);
       z-index: 100;
       display: none;
@@ -406,172 +444,169 @@
       padding: 16px;
     }
 
-    .modal-box {
-      background: #0f172a;
-      border: 1px solid rgba(255, 255, 255, 0.15);
+    .modal-card {
+      background: #0f1626;
+      border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 28px;
-      max-width: 580px;
+      max-width: 560px;
       width: 100%;
       overflow: hidden;
-      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8);
-      animation: zoomModal 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85);
+      animation: modalPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
       max-height: 90vh;
       display: flex;
       flex-direction: column;
     }
 
-    @keyframes zoomModal {
-      from { transform: scale(0.85); opacity: 0; }
+    @keyframes modalPop {
+      from { transform: scale(0.88); opacity: 0; }
       to { transform: scale(1); opacity: 1; }
     }
 
-    .modal-banner {
+    .modal-header-banner {
       background: var(--accent-gradient);
-      padding: 30px 24px;
+      padding: 28px 24px;
       text-align: center;
       position: relative;
     }
 
-    .modal-badge {
+    .badge-pill {
       display: inline-block;
-      background: rgba(0, 0, 0, 0.35);
+      background: rgba(0, 0, 0, 0.3);
       padding: 5px 14px;
-      border-radius: 30px;
-      font-size: 0.75rem;
+      border-radius: 100px;
+      font-size: 0.72rem;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 1px;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       color: #fff;
     }
 
     .modal-title {
-      font-family: 'Syne', sans-serif;
-      font-size: 2.1rem;
-      font-weight: 800;
+      font-size: 2rem;
       color: #fff;
-      line-height: 1.2;
+      line-height: 1.15;
     }
 
-    .modal-price-tag {
-      margin-top: 8px;
-      font-size: 1.1rem;
+    .modal-price-badge {
+      margin-top: 10px;
+      font-size: 1.05rem;
       font-weight: 700;
-      color: #ffecd2;
+      color: #fff7ed;
+      background: rgba(0, 0, 0, 0.2);
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 8px;
     }
 
-    .modal-content-scroll {
-      padding: 24px;
+    .modal-body {
+      padding: 22px 24px;
       overflow-y: auto;
       flex: 1;
     }
 
-    .food-meta-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 14px;
-      font-size: 0.95rem;
-    }
-
-    .food-desc-text {
-      color: #cbd5e1;
-      font-size: 0.95rem;
-      line-height: 1.6;
-      background: rgba(255, 255, 255, 0.03);
-      padding: 16px;
-      border-radius: 16px;
-      border-left: 3px solid var(--accent-neon);
-      margin-bottom: 20px;
-    }
-
-    .restaurants-section h4 {
-      font-family: 'Syne', sans-serif;
-      font-size: 1.05rem;
-      font-weight: 700;
-      color: #fff;
-      margin-bottom: 12px;
+    .food-meta {
       display: flex;
       align-items: center;
       gap: 8px;
+      margin-bottom: 12px;
+      font-size: 0.9rem;
+    }
+
+    .food-desc {
+      color: #cbd5e1;
+      font-size: 0.93rem;
+      line-height: 1.6;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 14px 16px;
+      border-radius: 14px;
+      border-left: 3px solid var(--accent);
+      margin-bottom: 20px;
     }
 
     .restaurant-card {
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
       border-radius: 16px;
       padding: 16px;
       margin-bottom: 12px;
-      transition: transform 0.2s;
     }
 
-    .restaurant-card:hover {
-      background: rgba(255, 255, 255, 0.07);
-      transform: translateY(-2px);
-    }
-
-    .rest-title-row {
+    .rest-row-head {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
 
     .rest-name {
       font-weight: 700;
       color: #fff;
-      font-size: 1.05rem;
+      font-size: 1.02rem;
+    }
+
+    .rest-price {
+      font-size: 0.8rem;
+      color: var(--gold);
+      font-weight: 700;
     }
 
     .rest-sub {
       color: var(--text-muted);
-      font-size: 0.85rem;
-      margin-bottom: 10px;
+      font-size: 0.84rem;
+      margin-bottom: 12px;
     }
 
-    .btn-maps-action {
+    .rest-actions-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn-action-sm {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 8px 14px;
+      padding: 7px 12px;
       background: #2563eb;
       color: #fff;
       text-decoration: none;
-      border-radius: 10px;
-      font-size: 0.85rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
       font-weight: 600;
       transition: background 0.2s;
     }
 
-    .btn-maps-action:hover {
-      background: #1d4ed8;
+    .btn-action-sm.food-app {
+      background: #ea580c;
     }
 
-    .modal-actions {
+    .modal-footer {
       padding: 16px 24px;
-      background: rgba(0, 0, 0, 0.4);
+      background: rgba(0, 0, 0, 0.35);
       border-top: 1px solid var(--card-border);
       display: flex;
-      gap: 12px;
+      gap: 10px;
     }
 
-    .btn-modal-dismiss, .btn-modal-reroll {
+    .btn-modal-action {
       flex: 1;
       padding: 14px;
       border-radius: 14px;
       font-weight: 700;
-      font-size: 0.95rem;
+      font-size: 0.92rem;
       cursor: pointer;
       border: none;
       transition: all 0.2s;
     }
 
-    .btn-modal-dismiss {
+    .btn-modal-action.secondary {
       background: rgba(255, 255, 255, 0.08);
       color: #fff;
     }
 
-    .btn-modal-reroll {
+    .btn-modal-action.primary {
       background: var(--accent-gradient);
       color: #fff;
     }
@@ -588,14 +623,14 @@
       justify-content: center;
     }
 
-    .pulsing-bowl {
-      font-size: 4rem;
-      animation: bounceBowl 1s infinite alternate cubic-bezier(0.5, 0.05, 1, 0.5);
+    .pulsing-pot {
+      font-size: 3.8rem;
+      animation: potBounce 0.9s infinite alternate cubic-bezier(0.5, 0.05, 1, 0.5);
     }
 
-    @keyframes bounceBowl {
+    @keyframes potBounce {
       from { transform: translateY(0); }
-      to { transform: translateY(-20px); }
+      to { transform: translateY(-16px); }
     }
   </style>
 </head>
@@ -603,108 +638,122 @@
 
   <!-- LOADER SCREEN -->
   <div id="loaderScreen" class="loader-screen">
-    <div class="pulsing-bowl">🍜</div>
-    <h2 style="font-family:'Syne',sans-serif; margin-top:20px; font-size:1.6rem; letter-spacing:-0.5px;">HANOI FOOD ROULETTE</h2>
-    <p id="loaderStatus" style="color:var(--text-muted); margin-top:8px; font-size:0.9rem;">Đang kết nối kho ẩm thực 36 phố phường...</p>
+    <div class="pulsing-pot">🍜</div>
+    <h2 style="margin-top:18px; font-size:1.5rem;">VỊ HÀ NỘI 3D</h2>
+    <p id="loaderStatus" style="color:var(--text-muted); margin-top:6px; font-size:0.88rem;">Đang kết nối thực đơn 36 phố phường...</p>
   </div>
 
   <!-- NAVIGATION -->
   <header class="navbar">
     <a href="#" class="brand">
-      <span class="brand-icon">🏮</span>
+      <div class="brand-badge">🥢</div>
       <div class="brand-text">
-        <h1>Hà Nội Roulette</h1>
-        <span>Ăn gì phố cổ 3D</span>
+        <h1 class="brand-title">Vị Hà Nội</h1>
+        <span>Ăn gì hôm nay? 3D</span>
       </div>
     </a>
     <div class="nav-actions">
-      <button id="btnSoundToggle" class="btn-sound" type="button">
+      <button id="btnSoundToggle" class="btn-nav-action" type="button">
         <span id="soundIcon">🔊</span>
         <span id="soundText">Bật tiếng</span>
+      </button>
+      <button id="btnHistory" class="btn-nav-action" type="button">
+        <span>📜 Lịch sử</span>
       </button>
     </div>
   </header>
 
-  <!-- APP CONTENT -->
+  <!-- MAIN APP LAYOUT -->
   <main class="app-layout">
-    <!-- PANEL BỘ LỌC -->
-    <aside class="glass-panel">
+    <!-- FILTER PANEL (Bento Grid Style) -->
+    <aside class="glass-card">
       <div class="filter-header">
-        <h2>Bộ Lọc Ẩm Thực</h2>
+        <h2>Bộ Lọc Món Ngon</h2>
         <span id="foodCountPill" class="pill-counter">Đang tải...</span>
       </div>
 
-      <!-- Ô tìm kiếm -->
-      <div class="filter-item">
-        <label for="filterSearch">Tìm nhanh tên món</label>
-        <input type="text" id="filterSearch" class="custom-input" placeholder="Phở, bún ốc, nộm bò khô...">
+      <!-- Quick Chips: Bữa ăn & Tâm trạng -->
+      <div class="quick-tags-container" id="quickChips">
+        <button class="filter-chip active" data-type="all">Tất cả</button>
+        <button class="filter-chip" data-type="time" data-val="Sáng">🌅 Ăn sáng</button>
+        <button class="filter-chip" data-type="time" data-val="Trưa">☀️ Ăn trưa</button>
+        <button class="filter-chip" data-type="time" data-val="Tối">🌙 Ăn tối</button>
+        <button class="filter-chip" data-type="time" data-val="Đêm">🦉 Ăn đêm</button>
+        <button class="filter-chip" data-type="mood" data-val="Hẹn hò">💑 Hẹn hò</button>
+        <button class="filter-chip" data-type="mood" data-val="Nhậu">🍻 Tụ tập</button>
       </div>
 
-      <!-- Lọc theo Quận/Khu vực (Hỗ trợ đa khu vực tách dấu ;) -->
-      <div class="filter-item">
-        <label for="filterDistrict">Khu Vực / Quận</label>
+      <!-- Tìm kiếm theo tên -->
+      <div class="filter-group">
+        <label class="filter-label" for="filterSearch">Tìm kiếm món ăn</label>
+        <input type="text" id="filterSearch" class="custom-input" placeholder="Phở bò, bún riêu cua, ốc cay...">
+      </div>
+
+      <!-- Khu vực / Quận -->
+      <div class="filter-group">
+        <label class="filter-label" for="filterDistrict">Khu vực / Quận</label>
         <select id="filterDistrict" class="custom-select">
           <option value="">Tất cả khu vực thủ đô</option>
         </select>
       </div>
 
-      <!-- Lọc theo Danh mục -->
-      <div class="filter-item">
-        <label for="filterCategory">Danh Mục Món</label>
+      <!-- Danh mục món -->
+      <div class="filter-group">
+        <label class="filter-label" for="filterCategory">Phân loại món</label>
         <select id="filterCategory" class="custom-select">
           <option value="">Tất cả danh mục</option>
         </select>
       </div>
 
-      <!-- Lọc theo Món Chay -->
-      <div class="filter-item">
+      <!-- Món chay Switch -->
+      <div class="filter-group">
         <label class="switch-row" for="filterVeg">
-          <span style="font-size:0.92rem; font-weight:600; color:#fff;">🥗 Chỉ gợi ý món Chay</span>
+          <span style="font-size:0.9rem; font-weight:600; color:#fff;">🥗 Chỉ lọc món chay thanh đạm</span>
           <div class="switch">
             <input type="checkbox" id="filterVeg">
-            <span class="slider"></span>
+            <span class="slider-track"></span>
           </div>
         </label>
       </div>
 
-      <!-- Lọc theo Giá Tối Đa -->
-      <div class="filter-item">
+      <!-- Ngân sách tối đa -->
+      <div class="filter-group">
         <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-          <label style="margin:0;">Ngân Sách Tối Đa</label>
+          <label class="filter-label" style="margin:0;">Mức giá tối đa</label>
           <span id="priceLabel" style="font-weight:700; color:var(--gold); font-size:0.85rem;">Không giới hạn</span>
         </div>
-        <input type="range" id="filterPrice" min="20000" max="500000" step="10000" value="500000" style="width:100%; accent-color: var(--accent-neon);">
+        <input type="range" id="filterPrice" min="25000" max="300000" step="5000" value="300000" style="width:100%; accent-color: var(--accent);">
       </div>
 
-      <button id="btnResetFilters" class="btn-reset-filters" type="button">Xóa mọi bộ lọc</button>
+      <button id="btnResetFilters" class="btn-reset-filters" type="button">Xóa tất cả bộ lọc</button>
     </aside>
 
-    <!-- KHU VỰC VÒNG QUAY 3D -->
+    <!-- 3D ROULETTE ARENA -->
     <section class="roulette-arena">
-      <div class="viewport-3d" id="viewport3d">
-        <!-- Kim chỉ trung tâm phong cách Neon Pin -->
-        <div class="pointer-pin">
-          <svg viewBox="0 0 36 50">
+      <div class="viewport-3d-wrapper" id="viewport3d">
+        <!-- Kim chỉ trung tâm có vật lý lò xo -->
+        <div class="wheel-pointer" id="wheelPointer">
+          <svg viewBox="0 0 42 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M21 54L4 16C0 8 6 0 15 0H27C36 0 42 8 38 16L21 54Z" fill="url(#pointerGrad)" stroke="#ffffff" stroke-width="2.5"/>
+            <circle cx="21" cy="14" r="6" fill="#ffffff" />
             <defs>
-              <linearGradient id="pinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#ff7a00" />
-                <stop offset="100%" stop-color="#ff0055" />
+              <linearGradient id="pointerGrad" x1="0" y1="0" x2="42" y2="56" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#ff7a00"/>
+                <stop offset="1" stop-color="#ff0055"/>
               </linearGradient>
             </defs>
-            <path d="M18 50 L2 14 C-2 7 3 0 11 0 L25 0 C33 0 38 7 34 14 Z" fill="url(#pinGrad)" stroke="#ffffff" stroke-width="2"/>
-            <circle cx="18" cy="14" r="6" fill="#ffffff" />
           </svg>
         </div>
         <canvas id="roulette3d"></canvas>
       </div>
 
-      <div class="spin-cta-container">
+      <div class="spin-controls">
         <button id="btnSpin" class="btn-spin-master" type="button">
-          <span>QUAY NGAY HÔM NAY</span>
-          <span>⚡</span>
+          <span class="btn-spin-label">QUAY NGAY HÔM NAY</span>
+          <span>🎲</span>
         </button>
-        <p style="font-size:0.8rem; color:var(--text-muted); text-align:center;">
-          Kéo thả đĩa hoặc chạm nút để ngẫu nhiên lựa chọn
+        <p style="font-size:0.78rem; color:var(--text-muted); text-align:center;">
+          Bấm để máy tính toán theo xác suất ngẫu nhiên thông minh
         </p>
       </div>
     </section>
@@ -712,40 +761,53 @@
 
   <!-- MODAL KẾT QUẢ SANG TRỌNG -->
   <div id="resultModal" class="modal-backdrop">
-    <div class="modal-box">
-      <div class="modal-banner">
-        <span id="resCategory" class="modal-badge">Danh mục</span>
-        <h2 id="resTitle" class="modal-title">Tên Món Ăn</h2>
-        <div id="resPrice" class="modal-price-tag">Giá tham khảo</div>
+    <div class="modal-card">
+      <div class="modal-header-banner">
+        <span id="resCategory" class="badge-pill">Món Ngon</span>
+        <h2 id="resTitle" class="modal-title">Phở Bò Tái Lăn</h2>
+        <div id="resPrice" class="modal-price-badge">65.000 đ – 90.000 đ</div>
       </div>
 
-      <div class="modal-content-scroll">
-        <div class="food-meta-row">
+      <div class="modal-body">
+        <div class="food-meta">
           <span>📍</span>
           <strong style="color:#fff;">Khu vực gợi ý:</strong>
-          <span id="resAreas" style="color:var(--emerald); font-weight:600;">Hà Nội</span>
+          <span id="resAreas" style="color:var(--emerald); font-weight:600;">Hai Bà Trưng, Hoàn Kiếm</span>
         </div>
 
-        <div id="resDesc" class="food-desc-text">
-          Mô tả món ăn ẩm thực thủ đô...
+        <div id="resDesc" class="food-desc">
+          Mô tả món ăn hấp dẫn...
         </div>
 
-        <div class="restaurants-section">
-          <h4>🍜 Quán ngon gợi ý ghé thử:</h4>
-          <div id="resRestaurantsContainer">
-            <!-- Quán ăn sẽ được render ở đây -->
-          </div>
+        <h4 style="font-size:0.95rem; margin-bottom:12px; color:#fff;">Quán ngon tiêu biểu ghé thử:</h4>
+        <div id="resRestaurantsContainer">
+          <!-- Render danh sách quán -->
         </div>
       </div>
 
-      <div class="modal-actions">
-        <button id="btnDismissModal" class="btn-modal-dismiss" type="button">Đóng</button>
-        <button id="btnSpinAgain" class="btn-modal-reroll" type="button">Quay món khác 🎲</button>
+      <div class="modal-footer">
+        <button id="btnShareInvite" class="btn-modal-action secondary" type="button">💌 Rủ bạn bè</button>
+        <button id="btnSpinAgain" class="btn-modal-action primary" type="button">Quay món khác ⚡</button>
       </div>
     </div>
   </div>
 
-  <!-- SCRIPT LOGIC -->
+  <!-- MODAL LỊCH SỬ -->
+  <div id="historyModal" class="modal-backdrop">
+    <div class="modal-card" style="max-height: 70vh;">
+      <div style="padding:20px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center;">
+        <h3>Lịch Sử Đã Quay</h3>
+        <button id="btnCloseHistory" style="background:transparent; border:none; color:#fff; font-size:1.4rem; cursor:pointer;">✕</button>
+      </div>
+      <div id="historyListContainer" style="padding:16px 20px; overflow-y:auto; flex:1;">
+        <!-- Danh sách lịch sử -->
+      </div>
+      <div style="padding:12px 20px; border-top:1px solid var(--card-border); text-align:right;">
+        <button id="btnClearHistory" style="background:transparent; border:none; color:var(--accent); font-size:0.85rem; font-weight:700; cursor:pointer;">Xóa toàn bộ lịch sử</button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
