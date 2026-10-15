@@ -2,27 +2,28 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Vị Hà Nội — Cỗ Máy Định Vị Ẩm Thực 3D</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Vị Hà Nội — Cỗ Máy Định Vị Ẩm Thực 3D Hoàng Gia</title>
 
-  <!-- Typography chuẩn tiếng Việt: Plus Jakarta Sans (Tiêu đề cao cấp) & Be Vietnam Pro (Nội dung chuẩn) -->
+  <!-- Typography chuẩn tiếng Việt -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
 
-  <!-- Thư viện Three.js CDN & Confetti -->
+  <!-- Three.js CDN & Confetti -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
   <style>
     :root {
-      --bg: #07090e;
-      --card-bg: rgba(16, 21, 34, 0.75);
+      --bg: #090c15;
+      --card-bg: rgba(18, 24, 38, 0.72);
       --card-border: rgba(255, 255, 255, 0.08);
-      --card-hover-border: rgba(255, 107, 43, 0.35);
-      --accent: #ff4b2b;
-      --accent-gradient: linear-gradient(135deg, #ff416c 0%, #ff4b2b 60%, #f59e0b 100%);
+      --card-hover: rgba(255, 107, 43, 0.35);
+      --accent: #ff4d29;
+      --accent-gradient: linear-gradient(135deg, #ff3366 0%, #ff5e36 50%, #f59e0b 100%);
       --gold: #f59e0b;
+      --gold-glow: rgba(245, 158, 11, 0.4);
       --emerald: #10b981;
       --text-main: #f8fafc;
       --text-muted: #94a3b8;
@@ -34,9 +35,14 @@
       padding: 0;
       font-family: 'Be Vietnam Pro', -apple-system, sans-serif;
       -webkit-tap-highlight-color: transparent;
+      user-select: none;
     }
 
-    h1, h2, h3, h4, .brand-title, .btn-spin-label {
+    input, select, textarea {
+      user-select: auto;
+    }
+
+    h1, h2, h3, h4, .brand-title, .btn-primary-spin {
       font-family: 'Plus Jakarta Sans', sans-serif;
       font-weight: 800;
       letter-spacing: -0.02em;
@@ -45,225 +51,431 @@
     body {
       background-color: var(--bg);
       background-image: 
-        radial-gradient(at 0% 0%, rgba(255, 75, 43, 0.12) 0px, transparent 40%),
-        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 40%),
-        radial-gradient(at 50% 50%, rgba(15, 23, 42, 0.6) 0px, transparent 100%);
+        radial-gradient(circle at 50% 0%, rgba(255, 77, 41, 0.15) 0%, transparent 60%),
+        radial-gradient(circle at 100% 100%, rgba(245, 158, 11, 0.08) 0%, transparent 50%),
+        radial-gradient(circle at 0% 100%, rgba(16, 185, 129, 0.06) 0%, transparent 50%);
       color: var(--text-main);
       min-height: 100vh;
+      min-height: -webkit-fill-available;
       overflow-x: hidden;
       display: flex;
       flex-direction: column;
     }
 
-    /* TOP NAVBAR */
-    .navbar {
+    /* TOP BAR */
+    .top-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 16px 28px;
+      padding: 12px 18px;
       backdrop-filter: blur(20px);
-      background: rgba(7, 9, 14, 0.85);
+      -webkit-backdrop-filter: blur(20px);
+      background: rgba(9, 12, 21, 0.85);
       border-bottom: 1px solid var(--card-border);
       position: sticky;
       top: 0;
-      z-index: 50;
+      z-index: 60;
     }
 
     .brand {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       text-decoration: none;
     }
 
-    .brand-badge {
-      width: 40px;
-      height: 40px;
+    .brand-icon {
+      width: 38px;
+      height: 38px;
       background: var(--accent-gradient);
       border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.3rem;
-      box-shadow: 0 4px 15px rgba(255, 75, 43, 0.35);
+      font-size: 1.25rem;
+      box-shadow: 0 4px 15px rgba(255, 77, 41, 0.35);
     }
 
     .brand-text h1 {
-      font-size: 1.25rem;
-      line-height: 1.1;
-      background: linear-gradient(90deg, #ffffff 0%, #cbd5e1 100%);
+      font-size: 1.15rem;
+      background: linear-gradient(90deg, #fff 0%, #cbd5e1 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
+      line-height: 1.1;
     }
 
     .brand-text span {
-      font-size: 0.7rem;
-      color: var(--accent);
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
+      font-size: 0.68rem;
+      color: var(--gold);
       font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
     }
 
-    .nav-actions {
+    .top-actions {
       display: flex;
-      align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
 
-    .btn-nav-action {
-      background: rgba(255, 255, 255, 0.05);
+    .btn-icon-top {
+      background: rgba(255, 255, 255, 0.06);
       border: 1px solid var(--card-border);
       color: #fff;
-      padding: 8px 14px;
+      padding: 6px 12px;
+      border-radius: 100px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+
+    .btn-icon-top:active {
+      transform: scale(0.96);
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    /* MAIN WRAPPER (MOBILE FIRST) */
+    .app-container {
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 10px 14px 90px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* QUICK CHIPS STRIP */
+    .quick-chips-wrapper {
+      margin: 8px 0 14px;
+      overflow-x: auto;
+      white-space: nowrap;
+      display: flex;
+      gap: 8px;
+      padding-bottom: 4px;
+      scrollbar-width: none;
+    }
+
+    .quick-chips-wrapper::-webkit-scrollbar {
+      display: none;
+    }
+
+    .q-chip {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: #cbd5e1;
+      padding: 7px 14px;
       border-radius: 100px;
       font-size: 0.82rem;
       font-weight: 600;
       cursor: pointer;
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       transition: all 0.25s;
     }
 
-    .btn-nav-action:hover {
-      background: rgba(255, 255, 255, 0.12);
-      border-color: rgba(255, 255, 255, 0.2);
+    .q-chip.active {
+      background: var(--accent-gradient);
+      color: #fff;
+      border-color: transparent;
+      box-shadow: 0 4px 15px rgba(255, 77, 41, 0.35);
     }
 
-    /* MAIN LAYOUT */
-    .app-layout {
-      max-width: 1360px;
+    /* 3D ARENA HERO */
+    .hero-3d-arena {
+      position: relative;
       width: 100%;
-      margin: 0 auto;
-      padding: 24px 20px 48px;
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 28px;
-      flex: 1;
+      height: 380px;
+      background: radial-gradient(circle at center, rgba(30, 41, 59, 0.4) 0%, rgba(9, 12, 21, 0.8) 75%);
+      border: 1px solid var(--card-border);
+      border-radius: 28px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.5), inset 0 0 40px rgba(255, 107, 43, 0.05);
     }
 
-    @media (min-width: 1024px) {
-      .app-layout {
-        grid-template-columns: 390px 1fr;
-        padding: 32px 28px;
+    @media (min-width: 768px) {
+      .hero-3d-arena {
+        height: 440px;
       }
     }
 
-    /* GLASS CARD */
-    .glass-card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 28px;
-      padding: 24px;
-      backdrop-filter: blur(28px);
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
-      transition: border-color 0.3s;
+    #cloche3dCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
     }
 
-    /* BENTO FILTER TABS */
-    .filter-header {
+    #cloche3dCanvas:active {
+      cursor: grabbing;
+    }
+
+    /* 3D OVERLAYS */
+    .arena-badge-status {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: rgba(10, 15, 28, 0.75);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 5px 12px;
+      border-radius: 100px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--gold);
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      margin-bottom: 20px;
+      gap: 6px;
+      pointer-events: none;
+      z-index: 10;
     }
 
-    .filter-header h2 {
-      font-size: 1.3rem;
-      color: #fff;
+    .arena-badge-status .dot-live {
+      width: 7px;
+      height: 7px;
+      background: var(--gold);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--gold);
+      animation: pulseDot 1.5s infinite alternate;
     }
 
-    .pill-counter {
-      background: rgba(255, 75, 43, 0.12);
-      border: 1px solid rgba(255, 75, 43, 0.35);
-      color: #ff6b4b;
-      padding: 4px 12px;
-      border-radius: 30px;
-      font-size: 0.78rem;
+    @keyframes pulseDot {
+      from { opacity: 0.3; }
+      to { opacity: 1; }
+    }
+
+    .arena-drag-hint {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: rgba(10, 15, 28, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 4px 10px;
+      border-radius: 100px;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* SHUFFLE TICKER ON ARENA */
+    .shuffle-ticker {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      right: 16px;
+      background: rgba(15, 22, 38, 0.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 18px;
+      padding: 10px 16px;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      z-index: 10;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .shuffle-sub {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--gold);
       font-weight: 700;
     }
 
-    .quick-tags-container {
-      display: flex;
-      gap: 8px;
-      overflow-x: auto;
-      padding-bottom: 12px;
-      margin-bottom: 16px;
-      scrollbar-width: none;
-    }
-
-    .quick-tags-container::-webkit-scrollbar {
-      display: none;
-    }
-
-    .filter-chip {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--card-border);
-      border-radius: 100px;
-      padding: 6px 14px;
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      cursor: pointer;
+    .shuffle-title {
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #fff;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+
+    /* ACTION ZONE */
+    .action-zone {
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .btn-primary-spin {
+      width: 100%;
+      padding: 16px 24px;
+      background: var(--accent-gradient);
+      border: none;
+      border-radius: 18px;
+      color: #fff;
+      font-size: 1.15rem;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(255, 77, 41, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.25s;
+    }
+
+    .btn-primary-spin:active:not(:disabled) {
+      transform: scale(0.98);
+      box-shadow: 0 5px 15px rgba(255, 77, 41, 0.3);
+    }
+
+    .btn-primary-spin:disabled {
+      opacity: 0.5;
+      filter: grayscale(0.8);
+      cursor: not-allowed;
+    }
+
+    .btn-primary-spin::after {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -60%;
+      width: 40%;
+      height: 200%;
+      background: rgba(255, 255, 255, 0.3);
+      transform: rotate(25deg);
+      animation: buttonSweep 3.5s infinite linear;
+    }
+
+    @keyframes buttonSweep {
+      0% { left: -60%; }
+      25% { left: 140%; }
+      100% { left: 140%; }
+    }
+
+    .sub-action-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .btn-sub-action {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 12px 14px;
+      border-radius: 14px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
       transition: all 0.2s;
     }
 
-    .filter-chip.active {
-      background: #ff4b2b;
+    .btn-sub-action:active {
+      background: rgba(255, 255, 255, 0.1);
+      transform: scale(0.98);
+    }
+
+    /* FILTER DRAWER / SHEET */
+    .filter-drawer {
+      margin-top: 16px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 18px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+
+    .filter-drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    .filter-drawer-header h3 {
+      font-size: 1rem;
       color: #fff;
-      border-color: #ff4b2b;
-      box-shadow: 0 2px 10px rgba(255, 75, 43, 0.4);
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
-    .filter-group {
-      margin-bottom: 18px;
+    .filter-content {
+      margin-top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
     }
 
-    .filter-label {
+    .filter-group label {
       display: block;
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       font-weight: 700;
       color: var(--text-muted);
       text-transform: uppercase;
       letter-spacing: 0.8px;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     .custom-input, .custom-select {
       width: 100%;
-      background: rgba(10, 14, 24, 0.85);
+      background: rgba(10, 15, 28, 0.85);
       border: 1px solid var(--card-border);
-      padding: 12px 16px;
-      border-radius: 14px;
+      padding: 11px 14px;
+      border-radius: 12px;
       color: #fff;
-      font-size: 0.92rem;
+      font-size: 0.9rem;
       outline: none;
-      transition: all 0.25s ease;
+      transition: all 0.2s;
     }
 
     .custom-input:focus, .custom-select:focus {
       border-color: var(--accent);
-      box-shadow: 0 0 16px rgba(255, 75, 43, 0.25);
+      box-shadow: 0 0 14px rgba(255, 77, 41, 0.3);
     }
 
     .custom-select option {
-      background: #0f172a;
+      background: #0f1626;
       color: #fff;
     }
 
-    .switch-row {
+    .price-slider-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 10px 0;
+      margin-bottom: 6px;
+    }
+
+    .price-val-tag {
+      color: var(--gold);
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+
+    .switch-label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       cursor: pointer;
+      padding: 4px 0;
     }
 
     .switch {
       position: relative;
       display: inline-block;
-      width: 46px;
+      width: 44px;
       height: 24px;
     }
 
@@ -275,7 +487,6 @@
 
     .slider-track {
       position: absolute;
-      cursor: pointer;
       inset: 0;
       background-color: #334155;
       border-radius: 34px;
@@ -299,314 +510,243 @@
     }
 
     input:checked + .slider-track:before {
-      transform: translateX(22px);
+      transform: translateX(20px);
     }
 
-    .btn-reset-filters {
-      width: 100%;
-      padding: 12px;
+    .btn-clear-filter {
+      padding: 10px;
       background: transparent;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 14px;
+      border: 1px dashed rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
       color: var(--text-muted);
-      font-size: 0.88rem;
+      font-size: 0.82rem;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.2s;
-      margin-top: 8px;
     }
 
-    .btn-reset-filters:hover {
-      background: rgba(255, 255, 255, 0.06);
-      color: #fff;
-    }
-
-    /* ROULETTE 3D ARENA */
-    .roulette-arena {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      position: relative;
-    }
-
-    .viewport-3d-wrapper {
-      position: relative;
-      width: 100%;
-      max-width: 680px;
-      height: 490px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    @media (max-width: 768px) {
-      .viewport-3d-wrapper {
-        height: 380px;
-      }
-    }
-
-    #roulette3d {
-      width: 100%;
-      height: 100%;
-      display: block;
-      border-radius: 32px;
-    }
-
-    /* KIM CHỈ VẬT LÝ CAO CẤP */
-    .wheel-pointer {
-      position: absolute;
-      top: 8px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 42px;
-      height: 56px;
-      z-index: 25;
-      pointer-events: none;
-      transform-origin: 50% 12px;
-      filter: drop-shadow(0 6px 14px rgba(0,0,0,0.7));
-      transition: transform 0.06s cubic-bezier(0.2, 0.8, 0.2, 1);
-    }
-
-    /* BIG CTA BUTTON */
-    .spin-controls {
-      margin-top: 24px;
-      width: 100%;
-      max-width: 420px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .btn-spin-master {
-      width: 100%;
-      padding: 18px 32px;
-      background: var(--accent-gradient);
-      border: none;
-      border-radius: 100px;
-      color: #fff;
-      font-size: 1.25rem;
-      cursor: pointer;
-      box-shadow: 0 10px 32px rgba(255, 75, 43, 0.45), inset 0 2px 4px rgba(255,255,255,0.4);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .btn-spin-master:hover:not(:disabled) {
-      transform: translateY(-3px) scale(1.02);
-      box-shadow: 0 16px 42px rgba(255, 75, 43, 0.65);
-    }
-
-    .btn-spin-master:active:not(:disabled) {
-      transform: translateY(1px) scale(0.99);
-    }
-
-    .btn-spin-master:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-      filter: grayscale(0.8);
-    }
-
-    .btn-spin-master::after {
-      content: '';
-      position: absolute;
-      top: -50%;
-      left: -60%;
-      width: 40%;
-      height: 200%;
-      background: rgba(255, 255, 255, 0.3);
-      transform: rotate(25deg);
-      animation: sweepShine 3.5s infinite linear;
-    }
-
-    @keyframes sweepShine {
-      0% { left: -60%; }
-      20% { left: 140%; }
-      100% { left: 140%; }
-    }
-
-    /* MODAL RESULT PREMIUM */
+    /* MODAL BASE */
     .modal-backdrop {
       position: fixed;
       inset: 0;
       background: rgba(4, 6, 12, 0.85);
-      backdrop-filter: blur(16px);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
       z-index: 100;
       display: none;
-      align-items: center;
+      align-items: flex-end;
       justify-content: center;
-      padding: 16px;
+      padding: 0;
     }
 
-    .modal-card {
-      background: #0f1626;
+    @media (min-width: 640px) {
+      .modal-backdrop {
+        align-items: center;
+        padding: 20px;
+      }
+    }
+
+    .modal-sheet {
+      background: #0f1628;
       border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 28px;
-      max-width: 560px;
+      border-radius: 28px 28px 0 0;
+      max-width: 540px;
       width: 100%;
-      overflow: hidden;
-      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85);
-      animation: modalPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-      max-height: 90vh;
+      max-height: 88vh;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.8);
+      animation: sheetUp 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
 
-    @keyframes modalPop {
-      from { transform: scale(0.88); opacity: 0; }
+    @media (min-width: 640px) {
+      .modal-sheet {
+        border-radius: 28px;
+        animation: modalZoom 0.28s ease-out;
+      }
+    }
+
+    @keyframes sheetUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+
+    @keyframes modalZoom {
+      from { transform: scale(0.92); opacity: 0; }
       to { transform: scale(1); opacity: 1; }
     }
 
-    .modal-header-banner {
+    .sheet-banner {
       background: var(--accent-gradient);
-      padding: 28px 24px;
+      padding: 22px 20px;
       text-align: center;
       position: relative;
     }
 
-    .badge-pill {
-      display: inline-block;
+    .btn-close-modal {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      width: 32px;
+      height: 32px;
       background: rgba(0, 0, 0, 0.3);
-      padding: 5px 14px;
-      border-radius: 100px;
-      font-size: 0.72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 8px;
+      border: none;
+      border-radius: 50%;
       color: #fff;
-    }
-
-    .modal-title {
-      font-size: 2rem;
-      color: #fff;
-      line-height: 1.15;
-    }
-
-    .modal-price-badge {
-      margin-top: 10px;
-      font-size: 1.05rem;
-      font-weight: 700;
-      color: #fff7ed;
-      background: rgba(0, 0, 0, 0.2);
-      display: inline-block;
-      padding: 4px 14px;
-      border-radius: 8px;
-    }
-
-    .modal-body {
-      padding: 22px 24px;
-      overflow-y: auto;
-      flex: 1;
-    }
-
-    .food-meta {
+      font-size: 1.1rem;
+      cursor: pointer;
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin-bottom: 12px;
-      font-size: 0.9rem;
+      justify-content: center;
     }
 
-    .food-desc {
-      color: #cbd5e1;
-      font-size: 0.93rem;
-      line-height: 1.6;
-      background: rgba(255, 255, 255, 0.03);
-      padding: 14px 16px;
+    .sheet-title {
+      font-size: 1.6rem;
+      color: #fff;
+      margin-top: 4px;
+      line-height: 1.2;
+    }
+
+    .sheet-price-tag {
+      display: inline-block;
+      margin-top: 8px;
+      background: rgba(0, 0, 0, 0.28);
+      padding: 4px 14px;
+      border-radius: 100px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: #fff;
+    }
+
+    .sheet-scroll-body {
+      padding: 18px 20px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .fortune-box {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px dashed rgba(245, 158, 11, 0.35);
       border-radius: 14px;
+      padding: 12px 14px;
+      font-size: 0.85rem;
+      color: #fde68a;
+      line-height: 1.5;
+    }
+
+    .food-detail-card {
+      background: rgba(255, 255, 255, 0.03);
       border-left: 3px solid var(--accent);
-      margin-bottom: 20px;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 0.88rem;
+      line-height: 1.5;
+      color: #cbd5e1;
+    }
+
+    .stat-pill-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .stat-pill {
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
     }
 
     .restaurant-card {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 16px;
-      padding: 16px;
-      margin-bottom: 12px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 14px;
     }
 
-    .rest-row-head {
+    .rest-head {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 4px;
     }
 
-    .rest-name {
+    .rest-title {
       font-weight: 700;
       color: #fff;
-      font-size: 1.02rem;
+      font-size: 0.95rem;
     }
 
-    .rest-price {
-      font-size: 0.8rem;
+    .rest-price-pill {
+      font-size: 0.78rem;
       color: var(--gold);
       font-weight: 700;
     }
 
-    .rest-sub {
+    .rest-addr {
+      font-size: 0.8rem;
       color: var(--text-muted);
-      font-size: 0.84rem;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
 
-    .rest-actions-row {
+    .rest-links {
       display: flex;
       gap: 8px;
-      flex-wrap: wrap;
     }
 
-    .btn-action-sm {
+    .btn-link-action {
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-decoration: none;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 7px 12px;
-      background: #2563eb;
+      gap: 5px;
       color: #fff;
-      text-decoration: none;
-      border-radius: 8px;
-      font-size: 0.8rem;
-      font-weight: 600;
-      transition: background 0.2s;
     }
 
-    .btn-action-sm.food-app {
+    .btn-link-maps {
+      background: #2563eb;
+    }
+
+    .btn-link-food {
       background: #ea580c;
     }
 
-    .modal-footer {
-      padding: 16px 24px;
-      background: rgba(0, 0, 0, 0.35);
+    .sheet-footer {
+      padding: 14px 20px calc(14px + env(safe-area-inset-bottom, 0px));
+      background: rgba(10, 15, 28, 0.9);
       border-top: 1px solid var(--card-border);
       display: flex;
       gap: 10px;
     }
 
-    .btn-modal-action {
+    .btn-sheet-act {
       flex: 1;
-      padding: 14px;
-      border-radius: 14px;
+      padding: 12px;
+      border-radius: 12px;
+      font-size: 0.88rem;
       font-weight: 700;
-      font-size: 0.92rem;
       cursor: pointer;
       border: none;
-      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
     }
 
-    .btn-modal-action.secondary {
+    .btn-sheet-act.secondary {
       background: rgba(255, 255, 255, 0.08);
       color: #fff;
     }
 
-    .btn-modal-action.primary {
+    .btn-sheet-act.primary {
       background: var(--accent-gradient);
       color: #fff;
     }
@@ -621,16 +761,18 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      text-align: center;
+      padding: 20px;
     }
 
-    .pulsing-pot {
-      font-size: 3.8rem;
-      animation: potBounce 0.9s infinite alternate cubic-bezier(0.5, 0.05, 1, 0.5);
+    .loader-dish {
+      font-size: 4rem;
+      animation: floatDish 1s infinite alternate cubic-bezier(0.5, 0.05, 1, 0.5);
     }
 
-    @keyframes potBounce {
-      from { transform: translateY(0); }
-      to { transform: translateY(-16px); }
+    @keyframes floatDish {
+      from { transform: translateY(0) scale(0.95); }
+      to { transform: translateY(-18px) scale(1.05); }
     }
   </style>
 </head>
@@ -638,172 +780,218 @@
 
   <!-- LOADER SCREEN -->
   <div id="loaderScreen" class="loader-screen">
-    <div class="pulsing-pot">🍜</div>
-    <h2 style="margin-top:18px; font-size:1.5rem;">VỊ HÀ NỘI 3D</h2>
-    <p id="loaderStatus" style="color:var(--text-muted); margin-top:6px; font-size:0.88rem;">Đang kết nối thực đơn 36 phố phường...</p>
+    <div class="loader-dish">🍲</div>
+    <h2 style="margin-top:16px; font-size:1.4rem;">VỊ HÀ NỘI 3D</h2>
+    <p id="loaderStatus" style="color:var(--text-muted); margin-top:6px; font-size:0.85rem;">Đang kết nối thực đơn 36 phố phường...</p>
   </div>
 
   <!-- NAVIGATION -->
-  <header class="navbar">
+  <header class="top-bar">
     <a href="#" class="brand">
-      <div class="brand-badge">🥢</div>
+      <div class="brand-icon">🥢</div>
       <div class="brand-text">
         <h1 class="brand-title">Vị Hà Nội</h1>
-        <span>Ăn gì hôm nay? 3D</span>
+        <span>Ẩm Thực 3D Hoàng Kim</span>
       </div>
     </a>
-    <div class="nav-actions">
-      <button id="btnSoundToggle" class="btn-nav-action" type="button">
-        <span id="soundIcon">🔊</span>
-        <span id="soundText">Bật tiếng</span>
+    <div class="top-actions">
+      <button id="btnWishlist" class="btn-icon-top" type="button">
+        <span>❤️</span>
+        <span id="favCount">0</span>
       </button>
-      <button id="btnHistory" class="btn-nav-action" type="button">
-        <span>📜 Lịch sử</span>
+      <button id="btnSoundToggle" class="btn-icon-top" type="button">
+        <span id="soundIcon">🔊</span>
+      </button>
+      <button id="btnHistory" class="btn-icon-top" type="button">
+        <span>📜</span>
       </button>
     </div>
   </header>
 
-  <!-- MAIN APP LAYOUT -->
-  <main class="app-layout">
-    <!-- FILTER PANEL (Bento Grid Style) -->
-    <aside class="glass-card">
-      <div class="filter-header">
-        <h2>Bộ Lọc Món Ngon</h2>
-        <span id="foodCountPill" class="pill-counter">Đang tải...</span>
+  <!-- MAIN APP CONTAINER (MOBILE FIRST) -->
+  <main class="app-container">
+
+    <!-- QUICK TIME & MOOD STRIP -->
+    <div class="quick-chips-wrapper" id="quickChips">
+      <button class="q-chip active" data-type="all">✨ Tất cả</button>
+      <button class="q-chip" data-type="time" data-val="Sáng">🌅 Ăn sáng</button>
+      <button class="q-chip" data-type="time" data-val="Trưa">☀️ Ăn trưa</button>
+      <button class="q-chip" data-type="time" data-val="Tối">🌙 Ăn tối</button>
+      <button class="q-chip" data-type="time" data-val="Đêm">🦉 Ăn đêm</button>
+      <button class="q-chip" data-type="mood" data-val="Hẹn hò">💑 Hẹn hò</button>
+      <button class="q-chip" data-type="mood" data-val="Tụ tập">🍻 Tụ tập / Nhậu</button>
+      <button class="q-chip" data-type="budget" data-val="cheap">💸 Dưới 45k</button>
+    </div>
+
+    <!-- 3D ROYAL CLOCHE ARENA -->
+    <section class="hero-3d-arena" id="arenaContainer">
+      <div class="arena-badge-status">
+        <div class="dot-live"></div>
+        <span id="foodCountPill">Đang tải...</span>
       </div>
 
-      <!-- Quick Chips: Bữa ăn & Tâm trạng -->
-      <div class="quick-tags-container" id="quickChips">
-        <button class="filter-chip active" data-type="all">Tất cả</button>
-        <button class="filter-chip" data-type="time" data-val="Sáng">🌅 Ăn sáng</button>
-        <button class="filter-chip" data-type="time" data-val="Trưa">☀️ Ăn trưa</button>
-        <button class="filter-chip" data-type="time" data-val="Tối">🌙 Ăn tối</button>
-        <button class="filter-chip" data-type="time" data-val="Đêm">🦉 Ăn đêm</button>
-        <button class="filter-chip" data-type="mood" data-val="Hẹn hò">💑 Hẹn hò</button>
-        <button class="filter-chip" data-type="mood" data-val="Nhậu">🍻 Tụ tập</button>
-      </div>
+      <div class="arena-drag-hint">👆 Chạm & Vuốt xoay 3D</div>
 
-      <!-- Tìm kiếm theo tên -->
-      <div class="filter-group">
-        <label class="filter-label" for="filterSearch">Tìm kiếm món ăn</label>
-        <input type="text" id="filterSearch" class="custom-input" placeholder="Phở bò, bún riêu cua, ốc cay...">
-      </div>
+      <canvas id="cloche3dCanvas"></canvas>
 
-      <!-- Khu vực / Quận -->
-      <div class="filter-group">
-        <label class="filter-label" for="filterDistrict">Khu vực / Quận</label>
-        <select id="filterDistrict" class="custom-select">
-          <option value="">Tất cả khu vực thủ đô</option>
-        </select>
-      </div>
-
-      <!-- Danh mục món -->
-      <div class="filter-group">
-        <label class="filter-label" for="filterCategory">Phân loại món</label>
-        <select id="filterCategory" class="custom-select">
-          <option value="">Tất cả danh mục</option>
-        </select>
-      </div>
-
-      <!-- Món chay Switch -->
-      <div class="filter-group">
-        <label class="switch-row" for="filterVeg">
-          <span style="font-size:0.9rem; font-weight:600; color:#fff;">🥗 Chỉ lọc món chay thanh đạm</span>
-          <div class="switch">
-            <input type="checkbox" id="filterVeg">
-            <span class="slider-track"></span>
-          </div>
-        </label>
-      </div>
-
-      <!-- Ngân sách tối đa -->
-      <div class="filter-group">
-        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-          <label class="filter-label" style="margin:0;">Mức giá tối đa</label>
-          <span id="priceLabel" style="font-weight:700; color:var(--gold); font-size:0.85rem;">Không giới hạn</span>
-        </div>
-        <input type="range" id="filterPrice" min="25000" max="300000" step="5000" value="300000" style="width:100%; accent-color: var(--accent);">
-      </div>
-
-      <button id="btnResetFilters" class="btn-reset-filters" type="button">Xóa tất cả bộ lọc</button>
-    </aside>
-
-    <!-- 3D ROULETTE ARENA -->
-    <section class="roulette-arena">
-      <div class="viewport-3d-wrapper" id="viewport3d">
-        <!-- Kim chỉ trung tâm có vật lý lò xo -->
-        <div class="wheel-pointer" id="wheelPointer">
-          <svg viewBox="0 0 42 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M21 54L4 16C0 8 6 0 15 0H27C36 0 42 8 38 16L21 54Z" fill="url(#pointerGrad)" stroke="#ffffff" stroke-width="2.5"/>
-            <circle cx="21" cy="14" r="6" fill="#ffffff" />
-            <defs>
-              <linearGradient id="pointerGrad" x1="0" y1="0" x2="42" y2="56" gradientUnits="userSpaceOnUse">
-                <stop stop-color="#ff7a00"/>
-                <stop offset="1" stop-color="#ff0055"/>
-              </linearGradient>
-            </defs>
-          </svg>
-        </div>
-        <canvas id="roulette3d"></canvas>
-      </div>
-
-      <div class="spin-controls">
-        <button id="btnSpin" class="btn-spin-master" type="button">
-          <span class="btn-spin-label">QUAY NGAY HÔM NAY</span>
-          <span>🎲</span>
-        </button>
-        <p style="font-size:0.78rem; color:var(--text-muted); text-align:center;">
-          Bấm để máy tính toán theo xác suất ngẫu nhiên thông minh
-        </p>
+      <!-- TICKER QUAY TÊN MÓN DƯỚI ĐÁY KHAY 3D -->
+      <div class="shuffle-ticker" id="shuffleTicker">
+        <div class="shuffle-sub" id="tickerSub">SẴN SÀNG KHÁM PHÁ</div>
+        <div class="shuffle-title" id="tickerTitle">Chạm nút để mở nắp bí ẩn</div>
       </div>
     </section>
-  </main>
 
-  <!-- MODAL KẾT QUẢ SANG TRỌNG -->
-  <div id="resultModal" class="modal-backdrop">
-    <div class="modal-card">
-      <div class="modal-header-banner">
-        <span id="resCategory" class="badge-pill">Món Ngon</span>
-        <h2 id="resTitle" class="modal-title">Phở Bò Tái Lăn</h2>
-        <div id="resPrice" class="modal-price-badge">65.000 đ – 90.000 đ</div>
+    <!-- ACTION BUTTONS -->
+    <section class="action-zone">
+      <button id="btnSpin" class="btn-primary-spin" type="button">
+        <span>🍲</span>
+        <span id="btnSpinLabel">MỞ NẮP CHỌN MÓN NGAY</span>
+      </button>
+
+      <div class="sub-action-row">
+        <button id="btnShakeMotion" class="btn-sub-action" type="button">
+          <span>📳</span>
+          <span>Lắc điện thoại</span>
+        </button>
+        <button id="btnRandomFortune" class="btn-sub-action" type="button">
+          <span>🔮</span>
+          <span>Bói quẻ hôm nay</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- EXPANDABLE FILTER DRAWER -->
+    <section class="filter-drawer">
+      <div class="filter-drawer-header" id="btnToggleFilter">
+        <h3>
+          <span>⚙️ Bộ Lọc Món Tùy Chỉnh</span>
+        </h3>
+        <span id="filterChevron" style="color:var(--gold); font-size:0.85rem; font-weight:700;">Thu gọn ▲</span>
       </div>
 
-      <div class="modal-body">
-        <div class="food-meta">
-          <span>📍</span>
-          <strong style="color:#fff;">Khu vực gợi ý:</strong>
-          <span id="resAreas" style="color:var(--emerald); font-weight:600;">Hai Bà Trưng, Hoàn Kiếm</span>
+      <div class="filter-content" id="filterContent">
+        <!-- Tìm kiếm -->
+        <div class="filter-group">
+          <label for="filterSearch">Tìm kiếm theo tên / từ khóa</label>
+          <input type="text" id="filterSearch" class="custom-input" placeholder="Phở bò, bún ốc, nộm bò khô...">
         </div>
 
-        <div id="resDesc" class="food-desc">
+        <!-- Quận / Khu vực -->
+        <div class="filter-group">
+          <label for="filterDistrict">Khu vực / Quận nội thành</label>
+          <select id="filterDistrict" class="custom-select">
+            <option value="">Toàn bộ 36 phố phường & Thủ đô</option>
+          </select>
+        </div>
+
+        <!-- Danh mục -->
+        <div class="filter-group">
+          <label for="filterCategory">Thể loại món</label>
+          <select id="filterCategory" class="custom-select">
+            <option value="">Tất cả danh mục món</option>
+          </select>
+        </div>
+
+        <!-- Mức giá ngân sách -->
+        <div class="filter-group">
+          <div class="price-slider-row">
+            <label style="margin:0;">Ngân sách tối đa</label>
+            <span id="priceLabel" class="price-val-tag">Không giới hạn</span>
+          </div>
+          <input type="range" id="filterPrice" min="25000" max="300000" step="5000" value="300000" style="width:100%; accent-color: var(--accent);">
+        </div>
+
+        <!-- Món chay -->
+        <div class="filter-group">
+          <label class="switch-label-row" for="filterVeg">
+            <span style="font-size:0.85rem; font-weight:600; color:#fff;">🥗 Chỉ lọc món chay thanh tịnh</span>
+            <div class="switch">
+              <input type="checkbox" id="filterVeg">
+              <span class="slider-track"></span>
+            </div>
+          </label>
+        </div>
+
+        <button id="btnResetFilters" class="btn-clear-filter" type="button">Đặt lại bộ lọc</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- RESULT SHEET MODAL -->
+  <div id="resultModal" class="modal-backdrop">
+    <div class="modal-sheet">
+      <div class="sheet-banner">
+        <button class="btn-close-modal" id="btnCloseResult" type="button">✕</button>
+        <span id="resCategory" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:1px; font-weight:700; color:#fff; opacity:0.9;">Món Ngon Hà Nội</span>
+        <h2 id="resTitle" class="sheet-title">Phở Bò Tái Lăn</h2>
+        <div id="resPrice" class="sheet-price-tag">65.000 đ – 90.000 đ</div>
+      </div>
+
+      <div class="sheet-scroll-body">
+        <!-- Quẻ bói ẩm thực vui -->
+        <div class="fortune-box" id="resFortune">
+          ✨ <strong>Quẻ ẩm thực hôm nay:</strong> Số hưởng trọn vẹn, được ăn món chuẩn vị thì tinh thần sảng khoái, công việc hanh thông!
+        </div>
+
+        <div class="stat-pill-row">
+          <span class="stat-pill" id="resTimeTag">⏰ Cả ngày</span>
+          <span class="stat-pill" id="resAreaTag">📍 Hoàn Kiếm, Hai Bà Trưng</span>
+          <span class="stat-pill" id="resVegTag">🥩 Món mặn</span>
+        </div>
+
+        <div class="food-detail-card" id="resDesc">
           Mô tả món ăn hấp dẫn...
         </div>
 
-        <h4 style="font-size:0.95rem; margin-bottom:12px; color:#fff;">Quán ngon tiêu biểu ghé thử:</h4>
-        <div id="resRestaurantsContainer">
-          <!-- Render danh sách quán -->
+        <h4 style="font-size:0.9rem; color:#fff; margin-top:4px;">📍 Quán ngon chuẩn vị gợi ý ghé thử:</h4>
+        <div id="resRestaurantsContainer" style="display:flex; flex-direction:column; gap:10px;">
+          <!-- Render quán ăn -->
         </div>
       </div>
 
-      <div class="modal-footer">
-        <button id="btnShareInvite" class="btn-modal-action secondary" type="button">💌 Rủ bạn bè</button>
-        <button id="btnSpinAgain" class="btn-modal-action primary" type="button">Quay món khác ⚡</button>
+      <div class="sheet-footer">
+        <button id="btnToggleFavorite" class="btn-sheet-act secondary" type="button">
+          <span id="favIcon">🤍</span>
+          <span>Thích</span>
+        </button>
+        <button id="btnShareInvite" class="btn-sheet-act secondary" type="button">
+          <span>💌</span>
+          <span>Rủ bạn</span>
+        </button>
+        <button id="btnSpinAgain" class="btn-sheet-act primary" type="button">
+          <span>🍲</span>
+          <span>Món khác</span>
+        </button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL LỊCH SỬ -->
-  <div id="historyModal" class="modal-backdrop">
-    <div class="modal-card" style="max-height: 70vh;">
-      <div style="padding:20px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center;">
-        <h3>Lịch Sử Đã Quay</h3>
-        <button id="btnCloseHistory" style="background:transparent; border:none; color:#fff; font-size:1.4rem; cursor:pointer;">✕</button>
+  <!-- WISHLIST MODAL -->
+  <div id="wishlistModal" class="modal-backdrop">
+    <div class="modal-sheet">
+      <div style="padding:18px 20px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="font-size:1.1rem; color:#fff;">❤️ Danh Sách Món Yêu Thích</h3>
+        <button class="btn-close-modal" style="position:static;" id="btnCloseWishlist" type="button">✕</button>
       </div>
-      <div id="historyListContainer" style="padding:16px 20px; overflow-y:auto; flex:1;">
-        <!-- Danh sách lịch sử -->
+      <div id="wishlistContainer" class="sheet-scroll-body">
+        <!-- Render danh sách yêu thích -->
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY MODAL -->
+  <div id="historyModal" class="modal-backdrop">
+    <div class="modal-sheet">
+      <div style="padding:18px 20px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="font-size:1.1rem; color:#fff;">📜 Lịch Sử Đã Khám Phá</h3>
+        <button class="btn-close-modal" style="position:static;" id="btnCloseHistory" type="button">✕</button>
+      </div>
+      <div id="historyListContainer" class="sheet-scroll-body">
+        <!-- Render danh sách lịch sử -->
       </div>
       <div style="padding:12px 20px; border-top:1px solid var(--card-border); text-align:right;">
-        <button id="btnClearHistory" style="background:transparent; border:none; color:var(--accent); font-size:0.85rem; font-weight:700; cursor:pointer;">Xóa toàn bộ lịch sử</button>
+        <button id="btnClearHistory" style="background:transparent; border:none; color:var(--accent); font-size:0.85rem; font-weight:700; cursor:pointer;" type="button">Xóa toàn bộ lịch sử</button>
       </div>
     </div>
   </div>
