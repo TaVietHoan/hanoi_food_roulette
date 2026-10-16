@@ -1,21 +1,24 @@
 <!DOCTYPE html>
-<html lang="vi" class="scroll-smooth">
+<html lang="vi" class="dark scroll-smooth select-none">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Ăn Gì Đây? • Trợ Lý Khám Phá Ẩm Thực Thông Minh</title>
-  <meta name="description" content="Chấm dứt câu hỏi 'Hôm nay ăn gì?'. Khám phá thực đơn và chọn món chuẩn vị tức thì!">
-  <meta name="theme-color" content="#FF5722">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Ăn Gì Đây? • Trợ Lý Ẩm Thực Thông Minh Mobile</title>
+  <meta name="description" content="Chấm dứt nỗi ám ảnh 'Hôm nay ăn gì?'. Khui món ngẫu nhiên, định vị quán gần bạn và đặt đồ ăn 1-chạm qua ShopeeFood, GrabFood!">
+  <meta name="theme-color" content="#0B0F19">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-  <!-- Font chữ độc quyền Be Vietnam Pro & Outfit: Khắc phục 100% lỗi font tiếng Việt -->
+  <!-- Google Fonts: Be Vietnam Pro & Outfit chuẩn Typography tiếng Việt -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet">
 
-  <!-- CDN Tailwind CSS -->
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
+      darkMode: 'class',
       theme: {
         extend: {
           fontFamily: {
@@ -23,24 +26,32 @@
             heading: ['"Outfit"', '"Be Vietnam Pro"', 'sans-serif'],
           },
           colors: {
+            dark: {
+              950: '#07090E',
+              900: '#0B0F19',
+              850: '#111726',
+              800: '#161F36',
+              700: '#23304E'
+            },
             brand: {
               50: '#fff5f1',
               100: '#ffe8e0',
-              200: '#ffd0c2',
+              400: '#ff7043',
               500: '#ff5722',
               600: '#ea4410',
-              700: '#c53408',
+              glow: 'rgba(255, 87, 34, 0.45)'
             },
-            surface: {
-              card: 'rgba(255, 255, 255, 0.85)',
-              glass: 'rgba(255, 255, 255, 0.72)',
-              border: 'rgba(226, 232, 240, 0.8)'
+            accent: {
+              gold: '#F59E0B',
+              emerald: '#10B981',
+              cyan: '#06B6D4',
+              purple: '#8B5CF6'
             }
           },
           boxShadow: {
-            'glow-brand': '0 12px 36px -4px rgba(255, 87, 34, 0.28)',
-            'card-soft': '0 10px 30px -4px rgba(15, 23, 42, 0.05), 0 4px 12px -2px rgba(15, 23, 42, 0.03)',
-            'card-hover': '0 20px 40px -6px rgba(15, 23, 42, 0.09), 0 10px 20px -4px rgba(255, 87, 34, 0.12)'
+            'glow-neon': '0 0 35px -5px rgba(255, 87, 34, 0.55)',
+            'glow-emerald': '0 0 30px -5px rgba(16, 185, 129, 0.4)',
+            'card-dark': '0 10px 30px -5px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.08)'
           }
         }
       }
@@ -51,31 +62,44 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
 
-  <!-- Three.js (3D Cloche Animation) -->
+  <!-- Three.js (3D Mystery Box Engine) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
   <style>
-    /* Gradient Background mờ ảo sang trọng */
+    /* Nền vũ trụ ẩm thực ánh Neon cho màn hình OLED */
     body {
-      background-color: #F8FAFC;
+      background-color: #07090E;
       background-image: 
-        radial-gradient(at 0% 0%, rgba(255, 87, 34, 0.08) 0px, transparent 50%),
-        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.06) 0px, transparent 50%),
-        radial-gradient(at 50% 50%, rgba(241, 245, 249, 0.5) 0px, transparent 100%);
+        radial-gradient(at 10% 10%, rgba(255, 87, 34, 0.12) 0px, transparent 40%),
+        radial-gradient(at 90% 20%, rgba(16, 185, 129, 0.10) 0px, transparent 45%),
+        radial-gradient(at 50% 90%, rgba(139, 92, 246, 0.08) 0px, transparent 50%);
       background-attachment: fixed;
+      -webkit-tap-highlight-color: transparent;
     }
 
-    /* Shimmer Skeleton Animation */
-    @keyframes shimmerAnim {
+    /* Hiệu ứng Skeleton Loading cho Dark Mode */
+    @keyframes darkShimmer {
       0% { transform: translateX(-100%); }
       100% { transform: translateX(100%); }
     }
-    .skeleton-shimmer::after {
+    .skeleton-dark::after {
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
-      animation: shimmerAnim 1.6s infinite;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.07), transparent);
+      animation: darkShimmer 1.8s infinite;
+    }
+
+    /* Hiệu ứng Glassmorphism sang trọng */
+    .glass-panel {
+      background: rgba(17, 23, 38, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glass-input {
+      background: rgba(11, 15, 25, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.12);
     }
 
     /* Modal Animation */
@@ -86,266 +110,352 @@
     .modal-active .modal-card {
       transform: translateY(0) scale(1) !important;
     }
+
+    /* Tùy chỉnh thanh cuộn siêu mỏng */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 999px;
+    }
   </style>
 </head>
-<body class="text-slate-800 antialiased font-sans min-h-screen flex flex-col pb-20 md:pb-8 selection:bg-brand-500 selection:text-white">
+<body class="text-slate-100 antialiased font-sans min-h-screen flex flex-col pb-24 md:pb-10 selection:bg-brand-500 selection:text-white">
 
-  <!-- TOP STATUS BAR: SILENT NOTIFIER -->
-  <div id="silent-save-indicator" class="fixed top-2 right-4 z-[110] text-[11.5px] font-medium text-slate-500 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full border border-slate-200/80 shadow-sm opacity-0 transition-opacity duration-300 pointer-events-none flex items-center gap-1.5">
-    <i data-lucide="cloud-check" class="w-3.5 h-3.5 text-emerald-500"></i>
-    <span>Đã đồng bộ tùy chọn</span>
+  <!-- TOP NOTIFIER: SILENT AUTO-SYNC -->
+  <div id="silent-save-indicator" class="fixed top-3 right-3 z-[110] text-[11px] font-semibold text-slate-300 bg-dark-850/95 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-slate-700/60 shadow-lg opacity-0 transition-opacity duration-300 pointer-events-none flex items-center gap-1.5">
+    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+    <span id="silent-save-text">Đã đồng bộ sở thích</span>
   </div>
 
-  <!-- NAVIGATION HEADER (GLASSMORPHISM) -->
-  <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/70 shadow-xs transition-all duration-300">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+  <!-- NAVIGATION BAR (MOBILE APP HEADER STYLE) -->
+  <header class="sticky top-0 z-50 glass-panel border-b border-white/5 px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between">
+    <div class="max-w-7xl mx-auto w-full flex items-center justify-between">
       
-      <!-- LOGO -->
-      <a href="#" class="flex items-center gap-3 group">
-        <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-600 to-amber-500 flex items-center justify-center text-white shadow-glow-brand group-hover:scale-105 transition-transform duration-300">
-          <i data-lucide="utensils" class="w-6 h-6 stroke-[2.2]"></i>
+      <!-- Logo Branding -->
+      <a href="#" class="flex items-center gap-2.5 group">
+        <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-tr from-brand-600 via-brand-500 to-amber-500 flex items-center justify-center text-white shadow-glow-neon group-hover:scale-105 active:scale-95 transition-all">
+          <i data-lucide="flame" class="w-5 h-5 fill-white stroke-none"></i>
         </div>
         <div>
-          <span class="font-heading font-black text-2xl tracking-tight bg-gradient-to-r from-slate-900 via-brand-700 to-brand-500 bg-clip-text text-transparent">Ăn Gì Đây?</span>
-          <p class="text-[11px] font-semibold tracking-wider text-slate-600 uppercase">Trợ lý ẩm thực cao cấp</p>
+          <span class="font-heading font-black text-xl sm:text-2xl tracking-tight bg-gradient-to-r from-white via-orange-100 to-brand-400 bg-clip-text text-transparent">Ăn Gì Đây?</span>
+          <div class="flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span class="text-[10px] font-bold tracking-wider text-slate-400 uppercase">AI Food Finder</span>
+          </div>
         </div>
       </a>
 
-      <!-- HEADER ACTIONS -->
-      <div class="flex items-center gap-3">
+      <!-- Quick Action Utilities -->
+      <div class="flex items-center gap-2">
         <!-- Nút Lịch Sử -->
-        <button id="btn-open-history" class="w-11 h-11 rounded-2xl bg-white border border-slate-200/90 text-slate-600 hover:text-brand-600 hover:border-brand-500/50 hover:shadow-card-soft active:scale-95 transition-all duration-200 flex items-center justify-center relative group" title="Lịch sử chọn món">
-          <i data-lucide="history" class="w-5 h-5 transition-transform group-hover:rotate-[-20deg]"></i>
+        <button id="btn-open-history" class="w-10 h-10 rounded-xl bg-dark-800/80 border border-white/10 text-slate-300 hover:text-brand-400 hover:border-brand-500/50 active:scale-90 transition-all flex items-center justify-center relative" title="Lịch sử chọn món">
+          <i data-lucide="history" class="w-4 h-4"></i>
         </button>
 
-        <!-- Nút Yêu Thích -->
-        <button id="btn-open-favorites" class="w-11 h-11 rounded-2xl bg-white border border-slate-200/90 text-slate-600 hover:text-rose-500 hover:border-rose-400/50 hover:shadow-card-soft active:scale-95 transition-all duration-200 flex items-center justify-center relative group" title="Món đã lưu">
-          <i data-lucide="heart" class="w-5 h-5 transition-transform group-hover:scale-110"></i>
-          <span id="fav-count-badge" class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-500 text-white text-[11px] font-bold flex items-center justify-center shadow-sm border-2 border-white scale-0 transition-transform duration-200">0</span>
+        <!-- Nút Món Yêu Thích -->
+        <button id="btn-open-favorites" class="w-10 h-10 rounded-xl bg-dark-800/80 border border-white/10 text-slate-300 hover:text-rose-400 hover:border-rose-500/50 active:scale-90 transition-all flex items-center justify-center relative" title="Món đã lưu">
+          <i data-lucide="heart" class="w-4 h-4"></i>
+          <span id="fav-count-badge" class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center shadow-md scale-0 transition-transform">0</span>
         </button>
 
-        <!-- Quick Refresh Data -->
-        <button id="btn-force-refresh" class="hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200/80 text-slate-700 font-semibold text-xs transition-all active:scale-95" title="Tải lại thực đơn mới nhất">
-          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-          <span>Làm mới</span>
+        <!-- Nút Tải lại Dữ Liệu -->
+        <button id="btn-force-refresh" class="w-10 h-10 sm:w-auto sm:px-3 sm:py-2 rounded-xl bg-dark-800/80 border border-white/10 text-slate-300 hover:text-emerald-400 hover:border-emerald-500/50 active:scale-90 transition-all flex items-center justify-center gap-1.5" title="Cập nhật thực đơn Google Sheets">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          <span class="hidden sm:inline text-xs font-bold">Làm mới</span>
         </button>
       </div>
 
     </div>
   </header>
 
-  <!-- MAIN APP CONTAINER -->
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 flex-1 w-full space-y-12">
+  <!-- MAIN CONTAINER -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 w-full space-y-6 pt-4 flex-1">
     
-    <!-- HERO SECTION & 3D CLOCHE INTERACTION -->
-    <section class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+    <!-- BAR TIỆN ÍCH THỜI GIAN THỰC & ĐỊNH VỊ GPS THIẾT BỊ -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 gap-3">
       
-      <!-- Cột Trái: Call To Action & Giờ Ăn Thông Minh -->
-      <div class="lg:col-span-7 space-y-6">
-        
-        <!-- Smart Time Pill -->
-        <div id="smart-time-pill" class="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-white/90 backdrop-blur-md border border-brand-100 shadow-sm cursor-pointer hover:border-brand-500 hover:shadow-card-soft transition-all duration-300 active:scale-95 group">
-          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span id="smart-time-text" class="text-xs font-bold text-slate-700 group-hover:text-brand-600 transition-colors">Đang tải gợi ý theo giờ...</span>
-          <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform"></i>
+      <!-- Card Giờ & Khung Giờ Ăn Thông Minh -->
+      <div id="smart-time-pill" class="glass-panel p-3.5 rounded-2xl flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all hover:border-brand-500/40 group">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-brand-500/15 border border-brand-500/30 text-brand-400 flex items-center justify-center shrink-0">
+            <i id="live-meal-icon" data-lucide="clock" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span id="live-clock" class="font-mono text-xs font-bold text-slate-400">00:00:00</span>
+              <span class="text-[10px] font-black px-2 py-0.5 rounded-md bg-brand-500/20 text-brand-400 border border-brand-500/30 uppercase tracking-wider">Đúng bữa</span>
+            </div>
+            <div id="smart-time-text" class="text-sm font-bold text-white group-hover:text-brand-400 transition-colors">Đang quét khung giờ ăn...</div>
+          </div>
         </div>
-
-        <h1 class="font-heading text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-[1.12]">
-          Đắn đo gì nữa, <br>
-          <span class="bg-gradient-to-r from-brand-600 via-amber-500 to-brand-500 bg-clip-text text-transparent">hôm nay ăn gì?</span>
-        </h1>
-
-        <p class="text-base sm:text-lg text-slate-600 font-normal leading-relaxed max-w-xl">
-          Tạm biệt những buổi trưa đau đầu suy nghĩ. Thuật toán thông minh sẽ tự động chọn món ăn chuẩn vị kèm danh sách các quán ngon danh tiếng gần bạn.
-        </p>
-
-        <!-- CTA Action Buttons -->
-        <div class="flex flex-wrap items-center gap-4 pt-2">
-          <button id="btn-hero-spin" class="relative group overflow-hidden px-8 py-4 rounded-2xl bg-gradient-to-r from-brand-600 via-brand-500 to-amber-500 text-white font-bold text-base shadow-glow-brand hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all duration-300 flex items-center gap-3">
-            <span class="absolute inset-0 w-full h-full bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></span>
-            <i data-lucide="sparkles" class="w-5 h-5 animate-spin text-amber-200" style="animation-duration: 4s;"></i>
-            <span id="spin-btn-label">Khui món ngẫu nhiên</span>
-          </button>
-
-          <button id="btn-scroll-menu" class="px-6 py-4 rounded-2xl bg-white border border-slate-200/90 text-slate-700 font-bold text-base hover:bg-slate-50 hover:border-slate-300 shadow-card-soft active:scale-95 transition-all duration-200 flex items-center gap-2">
-            <i data-lucide="layout-grid" class="w-5 h-5 text-slate-500"></i>
-            <span>Duyệt thực đơn</span>
-          </button>
-        </div>
-
-        <div class="flex items-center gap-2 text-xs font-medium text-slate-600 pt-1">
-          <kbd class="px-2.5 py-1 bg-white border border-slate-200 rounded-lg shadow-2xs font-mono font-bold text-slate-700">Space</kbd>
-          <span>hoặc bấm nút để mở lồng bàn ẩm thực</span>
-        </div>
-
+        <i data-lucide="sparkles" class="w-4 h-4 text-brand-400 group-hover:rotate-12 transition-transform"></i>
       </div>
 
-      <!-- Cột Phải: SÂN KHẤU 3D LỒNG BÀN (CLOCHE PRESENTATION STAGE) -->
-      <div class="lg:col-span-5">
-        <div class="relative w-full aspect-square max-h-[360px] sm:max-h-[400px] mx-auto rounded-3xl bg-gradient-to-b from-white/90 via-slate-50/80 to-brand-50/40 p-3 border border-white shadow-card-hover backdrop-blur-xl overflow-hidden flex flex-col items-center justify-center">
-          
-          <!-- Hào quang nền -->
-          <div class="absolute -top-12 -right-12 w-48 h-48 bg-brand-500/10 rounded-full blur-3xl pointer-events-none"></div>
-          <div class="absolute -bottom-12 -left-12 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-          <!-- Canvas Three.js -->
-          <div id="three-stage-container" class="w-full h-full relative cursor-grab active:cursor-grabbing"></div>
-
-          <!-- Trạng thái 3D Stage -->
-          <div class="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-slate-900/80 backdrop-blur-md text-white text-[11.5px] font-medium tracking-wide shadow-lg border border-white/10 flex items-center gap-2 pointer-events-none">
-            <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
-            <span id="stage-status-caption">Lồng bàn ẩm thực sẵn sàng</span>
+      <!-- Card Định Vị GPS Thiết Bị & Quán Gần Đây -->
+      <div id="btn-request-gps" class="glass-panel p-3.5 rounded-2xl flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all hover:border-emerald-500/40 group">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+            <i id="gps-status-icon" data-lucide="map-pin" class="w-5 h-5"></i>
           </div>
-
+          <div class="overflow-hidden">
+            <div class="flex items-center gap-1.5">
+              <span id="gps-pulse" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span class="text-[10px] font-black text-slate-400 uppercase tracking-wider">Vị trí của bạn</span>
+            </div>
+            <div id="gps-location-text" class="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors truncate">
+              Bấm để lấy vị trí thiết bị
+            </div>
+          </div>
         </div>
+        <button id="btn-refresh-loc" class="px-2.5 py-1 rounded-lg bg-white/5 text-[11px] font-bold text-slate-300 border border-white/10 group-hover:border-emerald-500/50">
+          Định vị
+        </button>
       </div>
 
     </section>
 
-    <!-- BỘ LỌC ĐA TIÊU CHÍ (DYNAMIC SMART FILTERS) -->
-    <section class="bg-white/80 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-card-soft space-y-6">
+    <!-- HERO SECTION & 3D MYSTERY CAPSULE BOX (HỘP BÍ ẨN ẨM THỰC THẦN KỲ) -->
+    <section class="glass-panel rounded-3xl p-5 sm:p-8 relative overflow-hidden border border-white/10">
       
-      <div class="flex items-center justify-between flex-wrap gap-4 border-b border-slate-100 pb-4">
-        <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center">
-            <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+      <!-- Neon Background Glows -->
+      <div class="absolute -top-20 -left-20 w-64 h-64 bg-brand-500/20 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -bottom-20 -right-20 w-64 h-64 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none"></div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+        
+        <!-- Cột Trái: Call To Action Mobile Friendly -->
+        <div class="lg:col-span-7 space-y-4 text-center lg:text-left">
+          
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-semibold text-slate-300">
+            <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-400"></i>
+            <span>Đã hỗ trợ: Lắc điện thoại để chọn món!</span>
           </div>
-          <h2 class="font-bold text-lg text-slate-800">Bộ lọc thông minh theo nhu cầu</h2>
+
+          <h1 class="font-heading text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight">
+            Khám Phá Bữa Ăn <br class="hidden sm:inline">
+            <span class="bg-gradient-to-r from-brand-400 via-amber-300 to-emerald-400 bg-clip-text text-transparent">Chỉ Bằng Một Chạm</span>
+          </h1>
+
+          <p class="text-xs sm:text-sm text-slate-400 max-w-lg mx-auto lg:mx-0 leading-relaxed">
+            Mở Hộp Bí Ẩn Ẩm Thực để tìm ngay món ngon ưng ý, xem thực đơn các quán chuẩn vị xung quanh và đặt giao hỏa tốc đến cửa nhà bạn.
+          </p>
+
+          <!-- Nút kích hoạt chính -->
+          <div class="pt-2 flex flex-col sm:flex-row items-center gap-3 justify-center lg:justify-start">
+            <button id="btn-hero-spin" class="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-brand-600 via-brand-500 to-amber-500 text-white font-extrabold text-sm sm:text-base shadow-glow-neon hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 group relative overflow-hidden">
+              <span class="absolute inset-0 w-full h-full bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></span>
+              <i data-lucide="package-open" class="w-5 h-5 text-amber-200 animate-bounce"></i>
+              <span id="spin-btn-label">MỞ HỘP BÍ ẨN ẨM THỰC</span>
+            </button>
+
+            <button id="btn-scroll-menu" class="w-full sm:w-auto px-6 py-4 rounded-2xl bg-dark-800/90 border border-white/10 text-slate-200 font-bold text-sm hover:bg-dark-700 active:scale-95 transition-all flex items-center justify-center gap-2">
+              <i data-lucide="compass" class="w-4 h-4 text-slate-400"></i>
+              <span>Duyệt Toàn Bộ Quán</span>
+            </button>
+          </div>
+
+          <!-- Gợi ý tương tác điện thoại & phím tắt -->
+          <div class="flex items-center justify-center lg:justify-start gap-3 text-[11px] text-slate-400 pt-1">
+            <span class="flex items-center gap-1.5"><i data-lucide="smartphone" class="w-3.5 h-3.5 text-brand-400"></i> Lắc nhẹ điện thoại</span>
+            <span>•</span>
+            <span class="flex items-center gap-1.5"><kbd class="px-2 py-0.5 rounded bg-dark-800 border border-white/10 font-mono text-[10px]">Space</kbd> trên máy tính</span>
+          </div>
+
         </div>
 
-        <button id="btn-reset-filters" class="text-xs font-semibold text-slate-600 hover:text-brand-600 flex items-center gap-1.5 transition-colors">
+        <!-- Cột Phải: SÂN KHẤU 3D MYSTERY BOX (THREE.JS HỘP BÍ ẨN CÔNG NGHỆ ÁNH SÁNG) -->
+        <div class="lg:col-span-5 flex justify-center">
+          <div class="relative w-full max-w-[320px] sm:max-w-[360px] aspect-square rounded-3xl bg-gradient-to-b from-dark-850 via-dark-900 to-dark-950 p-2 border border-white/10 shadow-card-dark flex flex-col items-center justify-center overflow-hidden">
+            
+            <!-- Canvas 3D -->
+            <div id="three-stage-container" class="w-full h-full relative cursor-grab active:cursor-grabbing"></div>
+
+            <!-- Trạng thái 3D Box -->
+            <div class="absolute bottom-3 px-3.5 py-1 rounded-full bg-dark-900/90 backdrop-blur-md text-[11px] font-bold text-slate-300 border border-white/10 shadow-lg flex items-center gap-2 pointer-events-none">
+              <span class="w-2 h-2 rounded-full bg-brand-500 animate-ping"></span>
+              <span id="stage-status-caption">Hộp Thần Bí Đang Chờ Mở</span>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- BỘ LỌC ĐA TIÊU CHÍ HIỆN ĐẠI (SMART FILTER PANEL) -->
+    <section class="glass-panel rounded-3xl p-5 sm:p-6 space-y-4">
+      
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
+        <div class="flex items-center gap-2">
+          <i data-lucide="sliders-horizontal" class="w-4 h-4 text-brand-400"></i>
+          <h2 class="font-bold text-sm sm:text-base text-white">Bộ lọc chuẩn gu</h2>
+        </div>
+
+        <button id="btn-reset-filters" class="text-xs font-semibold text-slate-400 hover:text-brand-400 flex items-center gap-1 transition-colors">
           <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
-          <span>Xóa tất cả bộ lọc</span>
+          <span>Mặc định</span>
         </button>
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
         
-        <!-- Bữa ăn / Mục đích -->
-        <div class="space-y-1.5">
-          <label for="filter-purpose" class="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-            <i data-lucide="sun" class="w-3.5 h-3.5 text-amber-500"></i> Bữa ăn
+        <!-- 1. Bữa ăn -->
+        <div class="space-y-1">
+          <label for="filter-purpose" class="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+            <i data-lucide="sun" class="w-3 h-3 text-amber-400"></i> Bữa ăn
           </label>
           <div class="relative">
-            <select id="filter-purpose" class="w-full appearance-none bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-500/10 transition-all">
+            <select id="filter-purpose" class="w-full glass-input appearance-none rounded-xl px-3 py-2.5 text-xs font-bold text-slate-200 outline-none focus:border-brand-500 transition-all">
               <option value="all">Tất cả bữa ăn</option>
             </select>
-            <i data-lucide="chevron-down" class="w-4 h-4 absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+            <i data-lucide="chevron-down" class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
           </div>
         </div>
 
-        <!-- Nhóm món -->
-        <div class="space-y-1.5">
-          <label for="filter-group" class="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-            <i data-lucide="soup" class="w-3.5 h-3.5 text-brand-500"></i> Nhóm món
+        <!-- 2. Nhóm món -->
+        <div class="space-y-1">
+          <label for="filter-group" class="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+            <i data-lucide="utensils" class="w-3 h-3 text-brand-400"></i> Nhóm món
           </label>
           <div class="relative">
-            <select id="filter-group" class="w-full appearance-none bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-500/10 transition-all">
+            <select id="filter-group" class="w-full glass-input appearance-none rounded-xl px-3 py-2.5 text-xs font-bold text-slate-200 outline-none focus:border-brand-500 transition-all">
               <option value="all">Tất cả nhóm</option>
             </select>
-            <i data-lucide="chevron-down" class="w-4 h-4 absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+            <i data-lucide="chevron-down" class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
           </div>
         </div>
 
-        <!-- Quận / Khu vực -->
-        <div class="space-y-1.5">
-          <label for="filter-district" class="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-            <i data-lucide="map-pin" class="w-3.5 h-3.5 text-emerald-500"></i> Khu vực
+        <!-- 3. Khu vực / Quận -->
+        <div class="space-y-1">
+          <label for="filter-district" class="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+            <i data-lucide="map-pin" class="w-3 h-3 text-emerald-400"></i> Khu vực
           </label>
           <div class="relative">
-            <select id="filter-district" class="w-full appearance-none bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-500/10 transition-all">
+            <select id="filter-district" class="w-full glass-input appearance-none rounded-xl px-3 py-2.5 text-xs font-bold text-slate-200 outline-none focus:border-brand-500 transition-all">
               <option value="all">Tất cả khu vực</option>
             </select>
-            <i data-lucide="chevron-down" class="w-4 h-4 absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+            <i data-lucide="chevron-down" class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
           </div>
         </div>
 
-        <!-- Ngân sách -->
-        <div class="space-y-1.5">
-          <label for="filter-budget" class="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-            <i data-lucide="wallet" class="w-3.5 h-3.5 text-blue-500"></i> Ngân sách tối đa
+        <!-- 4. Ngân sách -->
+        <div class="space-y-1">
+          <label for="filter-budget" class="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+            <i data-lucide="wallet" class="w-3 h-3 text-cyan-400"></i> Giá tối đa
           </label>
           <div class="relative">
-            <select id="filter-budget" class="w-full appearance-none bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-500/10 transition-all">
+            <select id="filter-budget" class="w-full glass-input appearance-none rounded-xl px-3 py-2.5 text-xs font-bold text-slate-200 outline-none focus:border-brand-500 transition-all">
               <option value="all">Mọi mức giá</option>
               <option value="35000">Dưới 35.000đ</option>
               <option value="50000">Dưới 50.000đ</option>
               <option value="100000">Dưới 100.000đ</option>
               <option value="200000">Dưới 200.000đ</option>
             </select>
-            <i data-lucide="chevron-down" class="w-4 h-4 absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+            <i data-lucide="chevron-down" class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
           </div>
         </div>
 
       </div>
 
-      <div class="pt-2 flex items-center justify-between flex-wrap gap-4">
-        <label class="flex items-center gap-3 cursor-pointer select-none">
-          <input type="checkbox" id="chk-exclude-recent" checked class="w-5 h-5 rounded-lg text-brand-600 focus:ring-brand-500 border-slate-300 accent-brand-500 transition-all cursor-pointer">
-          <span class="text-xs font-medium text-slate-600">Tránh gợi ý trùng các món vừa chọn gần đây</span>
+      <div class="pt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" id="chk-exclude-recent" checked class="w-4 h-4 rounded text-brand-500 focus:ring-0 accent-brand-500 cursor-pointer">
+          <span class="text-slate-300">Không lặp lại món vừa ăn gần đây</span>
         </label>
         
-        <span id="filtered-candidates-counter" class="text-xs font-bold text-brand-600 bg-brand-50 px-3 py-1.5 rounded-full border border-brand-100">
-          Sẵn sàng lọc...
+        <span id="filtered-candidates-counter" class="text-xs font-bold text-brand-400 bg-brand-500/10 px-3 py-1 rounded-full border border-brand-500/20">
+          Đang quét dữ liệu...
         </span>
       </div>
 
     </section>
 
-    <!-- KẾT QUẢ KHUI MÓN (RANDOM REVEAL SPOTLIGHT CARD) -->
-    <section id="random-result-section" class="hidden transition-all duration-500 transform translate-y-6">
+    <!-- KẾT QUẢ KHUI HỘP BÍ ẨN (SPOTLIGHT RESULT CARD) -->
+    <section id="random-result-section" class="hidden transition-all duration-500">
       
-      <div class="relative overflow-hidden bg-gradient-to-br from-white via-white to-orange-50/30 rounded-3xl p-6 sm:p-10 border-2 border-brand-500/70 shadow-2xl">
+      <div class="relative overflow-hidden rounded-3xl p-6 sm:p-8 bg-gradient-to-br from-dark-850 via-dark-900 to-brand-950 border-2 border-brand-500 shadow-glow-neon">
         
-        <!-- Background Glow Accent -->
-        <div class="absolute top-0 right-0 w-80 h-80 bg-brand-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div class="relative z-10 space-y-6">
+        <div class="space-y-6">
           
-          <div class="flex items-start justify-between gap-4 flex-wrap">
+          <!-- Tiêu đề món & Thao tác nhanh -->
+          <div class="flex items-start justify-between gap-3">
             <div>
-              <span class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-brand-500 text-white text-xs font-bold tracking-wider uppercase mb-3 shadow-sm">
-                <i data-lucide="award" class="w-3.5 h-3.5"></i> Lựa chọn chuẩn vị hôm nay
-              </span>
-              <h2 id="res-food-name" class="font-heading text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">Tên Món Ăn</h2>
+              <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-500 text-white text-[11px] font-black uppercase tracking-wider mb-2">
+                <i data-lucide="crown" class="w-3.5 h-3.5"></i> Món ăn định mệnh của bạn
+              </div>
+              <h2 id="res-food-name" class="font-heading text-2xl sm:text-4xl font-black text-white">Tên Món Ăn</h2>
             </div>
 
-            <!-- Nút Favorite kết quả -->
-            <button id="btn-toggle-fav-res" class="w-12 h-12 rounded-2xl bg-white border border-slate-200/90 text-slate-400 hover:text-rose-500 shadow-sm active:scale-90 transition-all flex items-center justify-center group" title="Thêm vào yêu thích">
-              <i data-lucide="heart" class="w-6 h-6 group-hover:scale-110 transition-transform"></i>
+            <button id="btn-toggle-fav-res" class="w-12 h-12 rounded-2xl bg-dark-800 border border-white/10 text-slate-400 hover:text-rose-500 active:scale-90 transition-all flex items-center justify-center shrink-0">
+              <i data-lucide="heart" class="w-6 h-6"></i>
             </button>
           </div>
 
-          <!-- Tags & Chips -->
+          <!-- Tags & Giá -->
           <div id="res-meta-chips" class="flex flex-wrap items-center gap-2"></div>
 
           <!-- Mô tả món -->
-          <p id="res-food-desc" class="text-slate-600 text-base leading-relaxed max-w-3xl"></p>
+          <p id="res-food-desc" class="text-xs sm:text-sm text-slate-300 leading-relaxed"></p>
 
-          <!-- Danh sách các quán gợi ý phục vụ món này -->
-          <div class="bg-slate-50/80 rounded-2xl p-5 border border-slate-200/80 space-y-3">
+          <!-- TÍNH NĂNG MỚI: CỔNG LIÊN KẾT ĐẶT ĐỒ ĂN TRỰC TIẾP (SHOPEEFOOD, GRABFOOD, BE) -->
+          <div class="p-4 rounded-2xl bg-dark-950/80 border border-white/10 space-y-2.5">
             <div class="flex items-center justify-between">
-              <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-                <i data-lucide="store" class="w-4 h-4 text-brand-500"></i>
-                <span>Các quán ngon có món này (<span id="res-venues-count">0</span> địa điểm)</span>
-              </h3>
+              <span class="text-xs font-black uppercase text-amber-400 tracking-wider flex items-center gap-1.5">
+                <i data-lucide="bike" class="w-4 h-4"></i> Đặt giao hỏa tốc qua ứng dụng:
+              </span>
+              <span class="text-[10px] text-slate-400">1-Chạm mở app</span>
             </div>
-            
-            <div id="res-venues-container" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-72 overflow-y-auto pr-1">
-              <!-- Render dynamic qua JS -->
+
+            <div class="grid grid-cols-3 gap-2">
+              <!-- ShopeeFood -->
+              <a id="link-shopeefood" href="#" target="_blank" rel="noopener noreferrer" class="flex flex-col items-center justify-center p-2.5 rounded-xl bg-orange-600/20 hover:bg-orange-600/30 border border-orange-500/40 text-orange-300 text-xs font-bold active:scale-95 transition-all gap-1 text-center">
+                <i data-lucide="shopping-bag" class="w-4 h-4 text-orange-400"></i>
+                <span>ShopeeFood</span>
+              </a>
+
+              <!-- GrabFood -->
+              <a id="link-grabfood" href="#" target="_blank" rel="noopener noreferrer" class="flex flex-col items-center justify-center p-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold active:scale-95 transition-all gap-1 text-center">
+                <i data-lucide="utensils-crossed" class="w-4 h-4 text-emerald-400"></i>
+                <span>GrabFood</span>
+              </a>
+
+              <!-- BeFood -->
+              <a id="link-befood" href="#" target="_blank" rel="noopener noreferrer" class="flex flex-col items-center justify-center p-2.5 rounded-xl bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-400/40 text-yellow-300 text-xs font-bold active:scale-95 transition-all gap-1 text-center">
+                <i data-lucide="zap" class="w-4 h-4 text-yellow-400"></i>
+                <span>Be Food</span>
+              </a>
             </div>
           </div>
 
-          <!-- Action buttons cho kết quả -->
-          <div class="flex flex-wrap items-center gap-3 pt-2">
-            <button id="btn-spin-again" class="px-6 py-3.5 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm shadow-glow-brand active:scale-95 transition-all flex items-center gap-2">
-              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          <!-- Danh sách các quán phục vụ món -->
+          <div class="space-y-3">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <i data-lucide="store" class="w-4 h-4 text-brand-400"></i>
+              <span>Quán gợi ý xung quanh (<span id="res-venues-count">0</span> địa điểm)</span>
+            </h3>
+
+            <div id="res-venues-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-1">
+              <!-- Dynamic Venues Cards -->
+            </div>
+          </div>
+
+          <!-- Action buttons chân trang Spotlight -->
+          <div class="flex items-center gap-3 pt-2">
+            <button id="btn-spin-again" class="flex-1 py-3.5 rounded-2xl bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs sm:text-sm active:scale-95 transition-all flex items-center justify-center gap-2">
+              <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
               <span>Đổi món khác</span>
             </button>
 
-            <button id="btn-share-res" class="px-6 py-3.5 rounded-2xl bg-white border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 active:scale-95 transition-all flex items-center gap-2">
-              <i data-lucide="share-2" class="w-4 h-4 text-slate-500"></i>
-              <span>Chia sẻ ngay</span>
+            <button id="btn-share-res" class="px-5 py-3.5 rounded-2xl bg-dark-800 border border-white/10 text-slate-200 font-bold text-xs sm:text-sm hover:bg-dark-700 active:scale-95 transition-all flex items-center gap-2">
+              <i data-lucide="share-2" class="w-4 h-4"></i>
+              <span>Chia sẻ</span>
             </button>
           </div>
 
@@ -356,23 +466,23 @@
     </section>
 
     <!-- EXPLORE CATALOG SECTION -->
-    <section id="explore-view" class="space-y-6 pt-4">
+    <section id="explore-view" class="space-y-4 pt-4">
       
-      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Khám phá toàn bộ thực đơn</h2>
-          <p id="food-count-label" class="text-xs sm:text-sm font-semibold text-slate-600 mt-1">Đang kết nối Google Sheets API...</p>
+          <h2 class="font-heading text-xl sm:text-2xl font-black text-white">Thực đơn ẩm thực chọn lọc</h2>
+          <p id="food-count-label" class="text-xs text-slate-400">Đang đồng bộ Google Sheets...</p>
         </div>
 
-        <!-- Ô Tìm kiếm tức thì mượt mà -->
-        <div class="relative w-full sm:w-80">
-          <input type="text" id="search-box" placeholder="Tìm theo tên món, nhóm, quận..." class="w-full bg-white border border-slate-200/90 rounded-2xl pl-11 pr-4 py-3 text-sm font-semibold text-slate-800 placeholder-slate-400 outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 shadow-card-soft transition-all">
-          <i data-lucide="search" class="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+        <!-- Ô Tìm kiếm nhanh -->
+        <div class="relative w-full sm:w-72">
+          <input type="text" id="search-box" placeholder="Tìm tên món, quán, quận..." class="w-full glass-input rounded-2xl pl-10 pr-4 py-2.5 text-xs font-bold text-white placeholder-slate-500 outline-none focus:border-brand-500 transition-all">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
         </div>
       </div>
 
       <!-- GRID HIỂN THỊ MÓN ĂN -->
-      <div id="foods-grid-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div id="foods-grid-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <!-- Render Skeletons / Cards -->
       </div>
 
@@ -380,59 +490,55 @@
 
   </main>
 
-  <!-- MODAL BOTTOM SHEET / POPUP CHI TIẾT -->
-  <div id="detail-modal" class="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-md flex items-end sm:items-center justify-center opacity-0 invisible transition-all duration-300 p-0 sm:p-4" role="dialog" aria-modal="true">
-    <div class="modal-card w-full sm:max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl max-h-[90vh] overflow-y-auto p-6 sm:p-8 shadow-2xl transform translate-y-8 sm:scale-95 transition-all duration-300 space-y-6">
+  <!-- MODAL BOTTOM SHEET / POPUP CHI TIẾT ĐA NĂNG -->
+  <div id="detail-modal" class="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center opacity-0 invisible transition-all duration-300 p-0 sm:p-4" role="dialog" aria-modal="true">
+    <div class="modal-card w-full sm:max-w-xl bg-dark-900 border border-white/10 rounded-t-3xl sm:rounded-3xl max-h-[88vh] overflow-y-auto p-5 sm:p-7 shadow-2xl transform translate-y-8 sm:scale-95 transition-all duration-300 space-y-5">
       
-      <div class="flex items-center justify-between border-b border-slate-100 pb-4">
-        <h3 id="modal-title" class="font-heading text-2xl font-bold text-slate-900">Chi tiết</h3>
-        <button id="modal-close-btn" class="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center active:scale-90 transition-transform">
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
+        <h3 id="modal-title" class="font-heading text-xl font-black text-white">Chi tiết món ngon</h3>
+        <button id="modal-close-btn" class="w-9 h-9 rounded-xl bg-dark-800 text-slate-300 flex items-center justify-center active:scale-90">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
 
       <div id="modal-body-content" class="space-y-4">
-        <!-- Nội dung modal đổ dynamic -->
+        <!-- Dynamic Content -->
       </div>
 
     </div>
   </div>
 
-  <!-- FLOATING TOAST CONTAINER -->
-  <div id="toast-container" class="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-[130] flex flex-col gap-2.5 w-11/12 max-w-md pointer-events-none"></div>
+  <!-- FLOATING TOAST -->
+  <div id="toast-container" class="fixed bottom-20 md:bottom-8 left-1/2 -translate-x-1/2 z-[130] flex flex-col gap-2 w-11/12 max-w-sm pointer-events-none"></div>
 
-  <!-- MOBILE BOTTOM STICKY BAR -->
-  <nav class="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-xl border-t border-slate-200/80 z-40 flex items-center justify-around px-2 shadow-lg">
-    <button id="tab-nav-random" class="flex flex-col items-center justify-center gap-1 text-brand-600 font-bold text-[11px] flex-1 py-1">
-      <i data-lucide="sparkles" class="w-5 h-5"></i>
-      <span>Chọn món</span>
+  <!-- NATIVE MOBILE BOTTOM NAVIGATION BAR -->
+  <nav class="md:hidden fixed bottom-0 left-0 right-0 h-16 glass-panel border-t border-white/10 z-40 flex items-center justify-around px-2 pb-safe">
+    <button id="tab-nav-random" class="flex flex-col items-center justify-center gap-1 text-brand-400 font-bold text-[10px] flex-1 py-1 active:scale-95 transition-all">
+      <i data-lucide="flame" class="w-5 h-5 fill-current"></i>
+      <span>Khui món</span>
     </button>
-    <button id="tab-nav-explore" class="flex flex-col items-center justify-center gap-1 text-slate-600 font-semibold text-[11px] flex-1 py-1">
-      <i data-lucide="layout-grid" class="w-5 h-5"></i>
+    <button id="tab-nav-explore" class="flex flex-col items-center justify-center gap-1 text-slate-400 font-semibold text-[10px] flex-1 py-1 active:scale-95 transition-all">
+      <i data-lucide="utensils" class="w-5 h-5"></i>
       <span>Thực đơn</span>
     </button>
-    <button id="tab-nav-favorites" class="flex flex-col items-center justify-center gap-1 text-slate-600 font-semibold text-[11px] flex-1 py-1">
+    <button id="tab-nav-favorites" class="flex flex-col items-center justify-center gap-1 text-slate-400 font-semibold text-[10px] flex-1 py-1 active:scale-95 transition-all">
       <i data-lucide="heart" class="w-5 h-5"></i>
       <span>Đã lưu</span>
     </button>
-    <button id="tab-nav-history" class="flex flex-col items-center justify-center gap-1 text-slate-600 font-semibold text-[11px] flex-1 py-1">
+    <button id="tab-nav-history" class="flex flex-col items-center justify-center gap-1 text-slate-400 font-semibold text-[10px] flex-1 py-1 active:scale-95 transition-all">
       <i data-lucide="history" class="w-5 h-5"></i>
       <span>Lịch sử</span>
     </button>
   </nav>
 
   <!-- FOOTER -->
-  <footer class="mt-20 border-t border-slate-200/80 bg-white/60 backdrop-blur-md py-10 text-slate-600 text-xs">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-      <div class="flex items-center gap-2">
-        <span class="font-heading font-black text-slate-800 text-sm">Ăn Gì Đây?</span>
-        <span>• Trợ lý ẩm thực địa phương v2.5</span>
-      </div>
-      <p class="text-slate-600 text-center">Dữ liệu đồng bộ trực tiếp từ Google Sheets qua Apps Script API Engine.</p>
+  <footer class="mt-14 border-t border-white/5 py-8 text-center text-slate-500 text-xs">
+    <div class="max-w-7xl mx-auto px-4 space-y-1">
+      <p class="font-bold text-slate-400">Ăn Gì Đây? • Smart Food Engine Mobile Edition</p>
+      <p class="text-[11px]">Đồng bộ dữ liệu trực tiếp Google Sheets & Định vị GPS thiết bị.</p>
     </div>
   </footer>
 
-  <!-- SCRIPT LOGIC -->
   <script src="app.js"></script>
 </body>
 </html>
