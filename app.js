@@ -1,6 +1,7 @@
 /**
- * ĂN GÌ ĐÂY? v3.0 - Mobile-first
+ * ĂN GÌ ĐÂY? v3.1 - Mobile-first
  * 3D tô mì bốc khói • Vuốt chọn món • Thực đơn tuần • Lắc để chọn • Trending
+ * MỚI: Giờ/vị trí/thời tiết • Gợi ý đi ăn hay đặt về • Đặt đồ ShopeeFood/GrabFood/beFood • Món hợp thời tiết
  */
 (function () {
   'use strict';
@@ -11,13 +12,24 @@
     API_URL: "https://script.google.com/macros/s/AKfycbxoKW24CyLJCYxNpy-fL6-WvsJTYbDjZRbYW0DHGnKNlHKoaLfMBKjQvi0Oa3SZS_9A/exec",
     KEYS: {
       FAV: "agd_favorites_v4", HIST: "agd_history_v4", BLOCK: "agd_blocked_v4", FILTERS: "agd_filters_v4",
-      SETTINGS: "agd_settings_v4", PLAN: "agd_plan_v4", CACHE: "agd_foods_cache_v4"
+      SETTINGS: "agd_settings_v4", PLAN: "agd_plan_v4", CACHE: "agd_foods_cache_v4",
+      LOC: "agd_location_v1", WX: "agd_weather_v1"
     },
     HISTORY_MAX: 60,
     REQUEST_TIMEOUT_MS: 16000,
     CACHE_MAX_AGE_MS: 10 * 60 * 1000,
     EXPLORE_PAGE: 30,
-    RECENT_EXCLUDE: 5
+    RECENT_EXCLUDE: 5,
+    // Vị trí mặc định khi người dùng chưa cho phép định vị
+    DEFAULT_LOC: { lat: 21.0285, lon: 105.8542, name: "Hà Nội" },
+    LOC_MAX_AGE_MS: 6 * 60 * 60 * 1000,
+    WX_MAX_AGE_MS: 15 * 60 * 1000,
+    // Các app đặt đồ. {q} = tên món đã encode. Sửa link ở đây nếu app đổi đường dẫn.
+    ORDER_APPS: [
+      { id: "shopee", name: "ShopeeFood", color: "#ee4d2d", fg: "#fff", url: "https://shopeefood.vn/search?q={q}" },
+      { id: "grab", name: "GrabFood", color: "#00b14f", fg: "#fff", url: "https://food.grab.com/vn/vi/restaurants?search={q}" },
+      { id: "be", name: "beFood", color: "#fed600", fg: "#2b2b2b", url: "https://food.be.com.vn/search?q={q}" }
+    ]
   };
 
   const BUDGETS = [
@@ -41,7 +53,7 @@
     favorites: [], history: [], blocked: [], trending: [],
     filters: { purpose: "all", group: "all", district: "all", budget: "all", sort: "default", excludeRecent: true },
     keyword: "", exploreLimit: CONFIG.EXPLORE_PAGE,
-    settings: { theme: "dark", haptics: true, shake: true, favBoost: true },
+    settings: { theme: "dark", haptics: true, shake: true, favBoost: true, weatherBoost: true },
     plan: { week: "", slots: {} },
     view: "home", meTab: "fav", current: null, venues: [], busy: false
   };
@@ -110,7 +122,16 @@
       x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
       return x;
     },
-    buzz(p) { if (state.settings.haptics && navigator.vibrate) { try { navigator.vibrate(p); } catch (e) {} } }
+    buzz(p) { if (state.settings.haptics && navigator.vibrate) { try { navigator.vibrate(p); } catch (e) {} } },
+    async getJson(url, ms = 8000) {
+      const ctl = new AbortController();
+      const t = setTimeout(() => ctl.abort(), ms);
+      try {
+        const r = await fetch(url, { signal: ctl.signal });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return await r.json();
+      } finally { clearTimeout(t); }
+    }
   };
 
   function timeInfo() {
@@ -215,6 +236,195 @@
     }
   };
   window.addEventListener("popstate", () => { if (Sheet.open) { Sheet.pushed = false; Sheet.close(true); } });
+
+  /* ============ 6b. NGỮ CẢNH: GIỜ • VỊ TRÍ • THỜI TIẾT • GỢI Ý ĂN/ĐẶT ============ */
+  const WARM_RE = /lau|pho|bun|chao|hu tieu|banh canh|mi\b|nuong|sup|nhung|xoi|cao lau|my quang|mien/;
+  const COOL_RE = /che|kem|tra|sinh to|nuoc|sua chua|salad|goi cuon|bun cha|bun dau|banh mi|an vat/;
+  const normCache = new Map();
+  const foodNorm = (f) => { let s = normCache.get(f.id); if (s === undefined) { s = U.norm(`${f.name} ${f.group}`); normCache.set(f.id, s); } return s; };
+
+  function wxInfo(code, isDay) {
+    if (code === 0) return { icon: isDay ? "☀️" : "🌙", text: isDay ? "Trời nắng" : "Trời quang", rain: false };
+    if (code === 1 || code === 2) return { icon: isDay ? "🌤️" : "☁️", text: "Ít mây", rain: false };
+    if (code === 3) return { icon: "☁️", text: "Nhiều mây", rain: false };
+    if (code === 45 || code === 48) return { icon: "🌫️", text: "Sương mù", rain: false };
+    if (code >= 51 && code <= 57) return { icon: "🌦️", text: "Mưa phùn", rain: true };
+    if (code >= 61 && code <= 67) return { icon: "🌧️", text: "Trời mưa", rain: true };
+    if (code >= 71 && code <= 77) return { icon: "❄️", text: "Có tuyết", rain: true };
+    if (code >= 80 && code <= 82) return { icon: "🌧️", text: "Mưa rào", rain: true };
+    if (code >= 95) return { icon: "⛈️", text: "Có dông", rain: true };
+    return { icon: "🌡️", text: "Thời tiết", rain: false };
+  }
+
+  const Ctx = {
+    loc: Object.assign({ def: true }, CONFIG.DEFAULT_LOC),
+    wx: null, aqi: null, rainSoon: 0, advice: null, hour: -1, loading: false,
+
+    async init() {
+      const c = Store.get(CONFIG.KEYS.LOC, null);
+      if (c && c.lat && Date.now() - c.ts < CONFIG.LOC_MAX_AGE_MS) this.loc = Object.assign({}, c, { def: false });
+      this.hour = new Date().getHours();
+      this.computeAdvice();
+      this.render();
+      setInterval(() => this.tick(), 20000);
+
+      // Nếu đã từng cho phép → tự định vị im lặng. Nếu chưa → hiện nút để người dùng chủ động bấm.
+      let granted = false;
+      try {
+        if (navigator.permissions && navigator.permissions.query) {
+          const p = await navigator.permissions.query({ name: "geolocation" });
+          granted = p.state === "granted";
+        }
+      } catch (e) {}
+      if (granted) await this.locate(true); else await this.refreshWeather();
+    },
+
+    tick() {
+      this.renderClock();
+      const h = new Date().getHours();
+      if (h !== this.hour) { this.hour = h; this.computeAdvice(); this.render(); UI.renderHome(); }
+    },
+
+    locate(silent) {
+      if (!navigator.geolocation) { if (!silent) toast("Thiết bị không hỗ trợ định vị", "error"); return Promise.resolve(); }
+      if (!silent) toast("Đang xác định vị trí...");
+      return new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(async (pos) => {
+          const lat = +pos.coords.latitude.toFixed(4), lon = +pos.coords.longitude.toFixed(4);
+          let name = "Vị trí của bạn";
+          try {
+            const d = await U.getJson(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=vi`, 7000);
+            const parts = [d.locality, d.city || d.principalSubdivision].filter(Boolean);
+            const uniq = parts.filter((x, i) => parts.indexOf(x) === i);
+            if (uniq.length) name = uniq.join(", ");
+          } catch (e) {}
+          this.loc = { lat, lon, name, def: false, ts: Date.now() };
+          Store.set(CONFIG.KEYS.LOC, this.loc);
+          Store.set(CONFIG.KEYS.WX, null);
+          await this.refreshWeather();
+          if (!silent) toast("Đã cập nhật vị trí & thời tiết", "success");
+          resolve();
+        }, async (err) => {
+          if (!silent) toast(err && err.code === 1 ? "Bạn chưa cho phép vị trí, đang dùng khu vực mặc định" : "Không lấy được vị trí", "error");
+          await this.refreshWeather();
+          resolve();
+        }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 });
+      });
+    },
+
+    async refreshWeather(force) {
+      if (this.loading) return;
+      const key = `${this.loc.lat},${this.loc.lon}`;
+      const c = Store.get(CONFIG.KEYS.WX, null);
+      if (!force && c && c.key === key && Date.now() - c.ts < CONFIG.WX_MAX_AGE_MS) {
+        this.wx = c.wx; this.aqi = c.aqi; this.rainSoon = c.rainSoon || 0;
+        this.computeAdvice(); this.render(); return;
+      }
+      this.loading = true;
+      const { lat, lon } = this.loc;
+      const [w, a] = await Promise.allSettled([
+        U.getJson(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,is_day&hourly=precipitation_probability&forecast_hours=3&timezone=auto`),
+        U.getJson(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi&timezone=auto`)
+      ]);
+      this.loading = false;
+      if (w.status === "fulfilled" && w.value && w.value.current) {
+        const cur = w.value.current;
+        const probs = (w.value.hourly && w.value.hourly.precipitation_probability) || [];
+        this.rainSoon = probs.length ? Math.max.apply(null, probs.map(Number).filter(n => !isNaN(n)).concat([0])) : 0;
+        const info = wxInfo(cur.weather_code, cur.is_day === 1);
+        this.wx = {
+          temp: Math.round(cur.temperature_2m), feels: Math.round(cur.apparent_temperature),
+          humidity: cur.relative_humidity_2m, precip: cur.precipitation || 0, wind: cur.wind_speed_10m || 0,
+          code: cur.weather_code, isDay: cur.is_day === 1, icon: info.icon, text: info.text, rain: info.rain || (cur.precipitation || 0) > 0.1
+        };
+      }
+      if (a.status === "fulfilled" && a.value && a.value.current && a.value.current.us_aqi != null) this.aqi = Math.round(a.value.current.us_aqi);
+      if (this.wx) Store.set(CONFIG.KEYS.WX, { key, ts: Date.now(), wx: this.wx, aqi: this.aqi, rainSoon: this.rainSoon });
+      this.computeAdvice(); this.render();
+    },
+
+    /* Tính điểm: nghiêng về "đặt về" khi mưa/nóng gắt/lạnh/ô nhiễm/khuya; ngược lại nên ra quán */
+    computeAdvice() {
+      const h = new Date().getHours(), w = this.wx;
+      let d = 0; const why = [];
+      if (w) {
+        if (w.rain) { d += 3; why.push("Trời đang mưa"); }
+        else if (this.rainSoon >= 60) { d += 2; why.push(`Sắp mưa (khoảng ${this.rainSoon}%)`); }
+        if (w.feels >= 37) { d += 2; why.push(`Nắng nóng, cảm giác ${w.feels}°C`); }
+        else if (w.feels >= 34) { d += 1; why.push(`Khá oi, cảm giác ${w.feels}°C`); }
+        if (w.temp <= 15) { d += 2; why.push(`Trời lạnh ${w.temp}°C`); }
+        if (w.wind >= 35) { d += 1; why.push("Gió khá mạnh"); }
+      }
+      if (this.aqi != null) {
+        if (this.aqi >= 150) { d += 2; why.push(`Không khí kém (AQI ${this.aqi})`); }
+        else if (this.aqi >= 100) { d += 1; why.push(`Không khí hơi ô nhiễm (AQI ${this.aqi})`); }
+      }
+      if (h >= 22 || h < 5) { d += 2; why.push("Đã khuya"); }
+      else if (h >= 21) { d += 1; why.push("Sắp khuya"); }
+
+      let mode, title, sub;
+      if (d >= 2) { mode = "in"; title = "🛵 Nên đặt về nhà"; sub = "Ngồi nhà cho khỏe, để shipper lo!"; }
+      else if (d === 1) { mode = "either"; title = "🤔 Đi hay ở đều được"; sub = "Có chút bất tiện, lười thì đặt về nhé."; }
+      else {
+        mode = "out"; title = "🍜 Nên ra quán ăn";
+        sub = w ? "Thời tiết dễ chịu, ra quán ăn nóng ngon hơn nhiều!" : "Ra quán ăn cho đúng vị nhé!";
+        if (w) why.push(`Trời ${w.text.toLowerCase()}, ${w.temp}°C`);
+      }
+      this.advice = { mode, title, sub, why };
+    },
+
+    mood() {
+      const w = this.wx; if (!w) return null;
+      if (w.rain || w.temp <= 20) return "warm";
+      if (w.feels >= 33) return "cool";
+      return null;
+    },
+    mul(food) {
+      if (!state.settings.weatherBoost) return 1;
+      const m = this.mood(); if (!m) return 1;
+      return (m === "warm" ? WARM_RE : COOL_RE).test(foodNorm(food)) ? 2 : 1;
+    },
+    tipFor(food) {
+      const w = this.wx; if (!w || !state.settings.weatherBoost) return "";
+      const m = this.mood(), s = foodNorm(food);
+      if (m === "warm" && WARM_RE.test(s)) return `${w.icon} Trời ${w.rain ? "mưa" : "se lạnh"} ${w.temp}°C — món nóng hổi này rất hợp!`;
+      if (m === "cool" && COOL_RE.test(s)) return `${w.icon} Trời nóng ${w.temp}°C — món này giải nhiệt cực đã!`;
+      return "";
+    },
+
+    renderClock() {
+      const n = new Date();
+      const t = $("ctx-time"), d = $("ctx-date");
+      if (t) t.textContent = n.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false });
+      if (d) d.textContent = n.toLocaleDateString("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit" });
+    },
+
+    render() {
+      if (!$("ctx-card")) return;
+      this.renderClock();
+      const w = this.wx;
+      $("ctx-wx-ico").textContent = w ? w.icon : (this.loading ? "⏳" : "🌡️");
+      $("ctx-wx-temp").textContent = w ? `${w.temp}°C` : "--°";
+      $("ctx-wx-text").textContent = w
+        ? `${w.text} · cảm giác ${w.feels}°${this.aqi != null ? " · AQI " + this.aqi : ""}`
+        : (this.loading ? "Đang lấy thời tiết..." : "Chưa có dữ liệu · chạm để thử lại");
+      $("ctx-loc-name").textContent = this.loc.def ? `${this.loc.name} (mặc định)` : this.loc.name;
+      $("ctx-locate").hidden = !this.loc.def;
+
+      const a = this.advice, box = $("ctx-advice");
+      if (!a) { box.hidden = true; return; }
+      box.hidden = false;
+      box.className = "ctx-advice " + a.mode;
+      const why = a.why.length ? `<p>${a.why.map(U.esc).join(" · ")}</p>` : "";
+      const act = a.mode === "in"
+        ? `<button class="btn-primary" style="padding:10px 14px;font-size:13px;border-radius:14px" data-ctx-spin="1"><i data-lucide="sparkles"></i>Khui món rồi đặt về</button>`
+        : a.mode === "out"
+          ? `<a class="btn-soft sm" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent("quán ăn gần tôi")}" target="_blank" rel="noopener noreferrer"><i data-lucide="map-pin"></i>Quán ăn gần tôi</a><button class="btn-soft sm" data-ctx-spin="1"><i data-lucide="sparkles"></i>Khui món</button>`
+          : `<button class="btn-soft sm" data-ctx-spin="1"><i data-lucide="sparkles"></i>Khui món</button>`;
+      box.innerHTML = `<h4>${U.esc(a.title)}</h4><p>${U.esc(a.sub)}</p>${why}<div class="ctx-actions">${act}</div>`;
+      icons();
+    }
+  };
 
   /* ===================== 7. 3D: TÔ MÌ BỐC KHÓI ===================== */
   const Stage = {
@@ -511,10 +721,11 @@
       }
       return list;
     },
+    // Món yêu thích ×2, món hợp thời tiết ×2 (nhân với nhau)
     pick(list) {
       if (!list.length) return null;
       const boost = state.settings.favBoost;
-      const w = list.map(i => (boost && isFav(i.id) ? 2 : 1));
+      const w = list.map(i => (boost && isFav(i.id) ? 2 : 1) * Ctx.mul(i));
       let r = Math.random() * w.reduce((a, b) => a + b, 0);
       for (let k = 0; k < list.length; k++) { r -= w[k]; if (r <= 0) return list[k]; }
       return list[list.length - 1];
@@ -677,6 +888,27 @@
       Sheet.show("Bộ lọc thông minh", html, "filter");
     },
 
+    /* ---- Khối đặt đồ ---- */
+    orderHtml(food) {
+      const q = encodeURIComponent(food.name);
+      const a = Ctx.advice;
+      const rec = a && a.mode === "in";
+      const btns = CONFIG.ORDER_APPS.map(app => `
+        <a class="ord-btn" href="${U.esc(app.url.replace("{q}", q))}" target="_blank" rel="noopener noreferrer"
+           data-act="order" data-app="${U.esc(app.id)}" style="--c:${app.color};--fg:${app.fg || "#fff"}">
+          <i data-lucide="shopping-bag"></i>${U.esc(app.name)}
+        </a>`).join("");
+      const why = rec ? `<span class="tag price" style="white-space:nowrap">Gợi ý hôm nay</span>` : "";
+      const sub = rec && a.why.length ? `<p class="order-note" style="margin-top:6px">${U.esc(a.why.join(" · "))}</p>` : "";
+      return `
+        <div class="order-box ${rec ? "rec" : ""}">
+          <h4><span>🛵 Đặt về nhà</span>${why}</h4>
+          ${sub}
+          <div class="order-grid">${btns}</div>
+          <p class="order-note">Mở app và tìm “<b>${U.esc(food.name)}</b>”. Tên món được chép sẵn, nếu app mở ra trang chủ thì chỉ cần dán vào ô tìm kiếm.</p>
+        </div>`;
+    },
+
     /* ---- SHEET: FOOD ---- */
     foodSheet(food, mode) {
       state.current = food;
@@ -706,6 +938,17 @@
           </div>`;
       }).join("") : `<div class="empty" style="padding:18px 0">Món phổ biến, dễ tìm quanh bạn. Thử tìm trên bản đồ nhé 👇</div>`;
 
+      const venueBlock = `
+        <div class="sec-row"><h4>📍 Quán gợi ý (${venues.length})</h4>
+          ${venues.length > 1 ? `<button class="btn-soft sm" data-act="venue-random"><i data-lucide="sparkles"></i>Chọn giúp quán</button>` : ""}
+        </div>
+        ${venuesHtml}
+        <a class="btn-soft wide" href="${mapsQ}" target="_blank" rel="noopener noreferrer"><i data-lucide="map-pin"></i>Tìm quán gần tôi trên Maps</a>`;
+      const orderBlock = this.orderHtml(food);
+      // Nếu hôm nay nên đặt về → đưa khối đặt đồ lên trước danh sách quán
+      const preferOrder = Ctx.advice && Ctx.advice.mode === "in";
+      const tip = Ctx.tipFor(food);
+
       const html = `
         <div class="food-hero" style="--g:${U.grad(food)};background:${U.grad(food)}">
           <div class="food-emoji">${U.emoji(food)}</div>
@@ -713,6 +956,7 @@
           <h2 class="food-name">${U.esc(food.name)}</h2>
         </div>
         <div class="tags">${tags}</div>
+        ${tip ? `<div class="wx-tip">${U.esc(tip)}</div>` : ""}
         <p class="food-desc">${U.esc(food.description || "Hương vị hấp dẫn, đậm bản sắc Việt. Ăn một lần là nhớ mãi!")}</p>
         <div class="act-row">
           ${primary}
@@ -720,11 +964,7 @@
           <button class="sq bad ${isBlocked(food.id) ? "on" : ""}" data-act="block" aria-label="Không thích món này"><i data-lucide="ban"></i></button>
           <button class="sq" data-act="share" aria-label="Chia sẻ"><i data-lucide="share-2"></i></button>
         </div>
-        <div class="sec-row"><h4>📍 Quán gợi ý (${venues.length})</h4>
-          ${venues.length > 1 ? `<button class="btn-soft sm" data-act="venue-random"><i data-lucide="sparkles"></i>Chọn giúp quán</button>` : ""}
-        </div>
-        ${venuesHtml}
-        <a class="btn-soft wide" href="${mapsQ}" target="_blank" rel="noopener noreferrer"><i data-lucide="map-pin"></i>Tìm quán gần tôi trên Maps</a>`;
+        ${preferOrder ? orderBlock + venueBlock : venueBlock + orderBlock}`;
       Sheet.show(mode === "result" ? "Gợi ý cho bạn" : "Chi tiết món", html, mode);
     },
 
@@ -775,7 +1015,9 @@
         sw("haptics", "Rung phản hồi", "Rung nhẹ khi khui món, lưu món") +
         sw("shake", "Lắc để chọn món", "Lắc điện thoại ở tab Chọn món") +
         sw("favBoost", "Ưu tiên món đã lưu", "Món yêu thích có cơ hội xuất hiện cao hơn") +
-        `<div style="padding:14px 0 6px"><button class="btn-soft wide danger" style="margin:0" data-clear-all="1"><i data-lucide="trash-2"></i>Xóa toàn bộ dữ liệu trên máy</button></div>`;
+        sw("weatherBoost", "Gợi ý món hợp thời tiết", "Trời mưa/lạnh ưu tiên món nóng, trời nóng ưu tiên món mát") +
+        `<div style="padding:14px 0 0"><button class="btn-soft wide" style="margin:0" data-ctx-locate="1"><i data-lucide="locate-fixed"></i>Cập nhật vị trí & thời tiết</button></div>` +
+        `<div style="padding:10px 0 6px"><button class="btn-soft wide danger" style="margin:0" data-clear-all="1"><i data-lucide="trash-2"></i>Xóa toàn bộ dữ liệu trên máy</button></div>`;
       icons();
     }
   };
@@ -993,6 +1235,7 @@
       Stage.init(); Swipe.bind(); Plan.bind(); this.bindEvents();
       if (state.settings.shake && typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission !== "function") Shake.enable();
       icons();
+      Ctx.init();            // chạy song song, không chặn việc tải thực đơn
       await this.load(false);
     },
 
@@ -1083,7 +1326,14 @@
         state.settings.theme = state.settings.theme === "dark" ? "light" : "dark";
         Store.set(CONFIG.KEYS.SETTINGS, state.settings); applyTheme();
       });
-      $("btn-force-refresh").addEventListener("click", () => this.load(true));
+      $("btn-force-refresh").addEventListener("click", () => { this.load(true); Ctx.refreshWeather(true); });
+
+      // Thẻ ngữ cảnh (giờ/vị trí/thời tiết) + nút trong tab "Của tôi"
+      document.addEventListener("click", (e) => {
+        if (e.target.closest("[data-ctx-locate]")) { Ctx.locate(false); return; }
+        if (e.target.closest("[data-ctx-refresh]")) { toast("Đang cập nhật thời tiết..."); Ctx.refreshWeather(true); return; }
+        if (e.target.closest("[data-ctx-spin]")) { App.spin(); }
+      });
 
       // Mở bộ lọc
       $$(".js-open-filter").forEach(b => b.addEventListener("click", () => UI.filterSheet()));
@@ -1155,6 +1405,15 @@
           case "reroll": Sheet.close(); setTimeout(() => App.spin(), 320); break;
           case "choose":
             if (food) { addHistory(food); celebrate(U.emoji(food)); U.buzz([20, 30, 40]); toast(`Chốt rồi: ${food.name}! Ăn ngon nhé 😋`, "success"); Sheet.close(); UI.renderHome(); }
+            break;
+          case "order":
+            // Không preventDefault: để thẻ <a> tự mở app/web. Chép sẵn tên món để dán vào ô tìm kiếm.
+            if (food) {
+              try { navigator.clipboard && navigator.clipboard.writeText(food.name); } catch (_) {}
+              Api.track(food.id, "order");
+              U.buzz(15);
+              toast(`Đã chép "${food.name}" — dán vào ô tìm kiếm nếu cần`, "success");
+            }
             break;
           case "fav": if (food) setFav(food, !isFav(food.id)); break;
           case "block":
