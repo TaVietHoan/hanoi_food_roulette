@@ -1,1344 +1,1208 @@
 /**
- * ============================================================================
- * DỰ ÁN: ĂN GÌ ĐÂY? (SMART FOOD ENGINE v3.0 - MOBILE EDITION)
- * File: app.js - Xử lý Logic Hộp Bí Ẩn 3D, GPS Geolocation, Lắc Điện Thoại,
- *                Đồng Hồ Thực, Đặt Đồ 1-Chạm ShopeeFood/GrabFood/Be
- * ============================================================================
+ * ĂN GÌ ĐÂY? v3.0 - Mobile-first
+ * 3D tô mì bốc khói • Vuốt chọn món • Thực đơn tuần • Lắc để chọn • Trending
  */
-
 (function () {
   'use strict';
 
-  // 1. CẤU HÌNH HỆ THỐNG
+  /* ============================ 1. CẤU HÌNH ============================ */
   const CONFIG = {
     APP_NAME: "Ăn Gì Đây?",
     API_URL: "https://script.google.com/macros/s/AKfycbxoKW24CyLJCYxNpy-fL6-WvsJTYbDjZRbYW0DHGnKNlHKoaLfMBKjQvi0Oa3SZS_9A/exec",
-    STORAGE_KEYS: {
-      FAVORITES: "agd_fav_v3_dark",
-      HISTORY: "agd_hist_v3_dark",
-      USER_LOCATION: "agd_user_loc_v3"
+    KEYS: {
+      FAV: "agd_favorites_v4", HIST: "agd_history_v4", BLOCK: "agd_blocked_v4", FILTERS: "agd_filters_v4",
+      SETTINGS: "agd_settings_v4", PLAN: "agd_plan_v4", CACHE: "agd_foods_cache_v4"
     },
-    HISTORY_MAX_ITEMS: 30,
+    HISTORY_MAX: 60,
     REQUEST_TIMEOUT_MS: 16000,
-    SHAKE_THRESHOLD: 18 // Ngưỡng gia tốc lắc điện thoại
+    CACHE_MAX_AGE_MS: 10 * 60 * 1000,
+    EXPLORE_PAGE: 30,
+    RECENT_EXCLUDE: 5
   };
 
-  // 2. TRẠNG THÁI TOÀN CỤC
+  const BUDGETS = [
+    ["all", "Mọi mức giá"], ["max:35000", "Dưới 35k"], ["max:50000", "Dưới 50k"],
+    ["max:100000", "Dưới 100k"], ["max:200000", "Dưới 200k"], ["min:100000", "Từ 100k (chiêu đãi)"]
+  ];
+  const SORTS = [
+    ["default", "Mặc định"], ["price-asc", "Giá thấp → cao"], ["price-desc", "Giá cao → thấp"],
+    ["venues", "Nhiều quán nhất"], ["name", "Tên A → Z"]
+  ];
+  const MEALS = [
+    { k: "sang", label: "Sáng", icon: "🌅", kw: ["sang"] },
+    { k: "trua", label: "Trưa", icon: "☀️", kw: ["trua"] },
+    { k: "toi", label: "Tối", icon: "🌙", kw: ["toi"] }
+  ];
+  const DAYS = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"];
+
+  /* ============================== 2. STATE ============================== */
   const state = {
-    foods: [],
-    filteredFoods: [],
-    currentFood: null,
-    favorites: [],
-    history: [],
-    userLocation: null, // { lat, lng, district, addressName }
-    filtersMeta: {
-      groups: [],
-      purposes: [],
-      districts: []
-    },
-    activeFilters: {
-      purpose: "all",
-      group: "all",
-      district: "all",
-      maxBudget: "all",
-      keyword: "",
-      excludeRecent: true
-    },
-    isLoading: false,
-    isSpinning: false,
-    lastShakeTime: 0
+    foods: [], byId: new Map(), meta: { groups: [], purposes: [], districts: [] },
+    favorites: [], history: [], blocked: [], trending: [],
+    filters: { purpose: "all", group: "all", district: "all", budget: "all", sort: "default", excludeRecent: true },
+    keyword: "", exploreLimit: CONFIG.EXPLORE_PAGE,
+    settings: { theme: "dark", haptics: true, shake: true, favBoost: true },
+    plan: { week: "", slots: {} },
+    view: "home", meTab: "fav", current: null, venues: [], busy: false
   };
 
-  // 3. TIỆN ÍCH HỖ TRỢ
-  const Utils = {
-    escapeHTML(str) {
-      if (!str) return "";
-      return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+  const $ = (id) => document.getElementById(id);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  const icons = () => { try { window.lucide && lucide.createIcons(); } catch (e) {} };
+  const isFav = (id) => state.favorites.some(f => f.id === id);
+  const isBlocked = (id) => state.blocked.some(f => f.id === id);
+
+  /* ============================== 3. UTILS ============================== */
+  const EMOJI_RULES = [
+    [/banh mi/, "🥖"], [/cafe|ca phe/, "☕"], [/tra sua|tran chau|sinh to|nuoc ep|\btra\b/, "🧋"],
+    [/lau|hotpot|nhung/, "🍲"], [/pho|bun|mien|hu tieu|banh canh|cao lau|my quang|\bmi\b|nui|mi goi/, "🍜"],
+    [/xoi/, "🍙"], [/com|chao/, "🍚"], [/pizza/, "🍕"], [/burger|hamburger/, "🍔"], [/sushi|nhat|han quoc|japan|korea/, "🍣"],
+    [/hai san|tom|cua|\boc\b|ngheu|so diep/, "🦐"], [/\bca\b/, "🐟"], [/\bga\b|vit|ga ran/, "🍗"],
+    [/nuong|bbq|suon|thit|bo\b/, "🍖"], [/che|kem|sua chua|trang mieng/, "🍧"],
+    [/salad|rau|chay|healthy/, "🥗"], [/an vat|xien|snack|bap|banh trang/, "🍢"],
+    [/banh|goi cuon|nem|cha gio|bao/, "🥟"]
+  ];
+
+  const U = {
+    esc(s) {
+      if (s === null || s === undefined) return "";
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     },
-    normalizeVietnamese(str) {
-      if (!str) return "";
-      return str
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/đ/g, "d")
-        .replace(/Đ/g, "d")
-        .trim();
+    norm(s) {
+      if (!s) return "";
+      return String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").trim();
     },
-    formatCurrency(val) {
-      if (val === null || val === undefined || isNaN(val)) return "Bình dân";
-      return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(val);
+    isUrl(s) {
+      if (!s || typeof s !== "string") return false;
+      try { const u = new URL(s); return u.protocol === "http:" || u.protocol === "https:"; } catch (_) { return false; }
     },
-    isValidUrl(string) {
-      if (!string || typeof string !== "string") return false;
-      try {
-        const u = new URL(string);
-        return u.protocol === "http:" || u.protocol === "https:";
-      } catch (_) {
-        return false;
-      }
+    shuffle(arr) {
+      const a = arr.slice();
+      for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+      return a;
     },
-    vibrate(pattern = 40) {
-      if ("vibrate" in navigator) {
-        try { navigator.vibrate(pattern); } catch (_) {}
-      }
+    hash(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); },
+    hue(food) { return U.hash(U.norm(food.group || food.name || "")) % 360; },
+    grad(food) { const h = U.hue(food); return `linear-gradient(135deg,hsl(${h},85%,60%),hsl(${(h + 48) % 360},85%,50%))`; },
+    emoji(food) {
+      const s = U.norm((food.name || "") + " " + (food.group || ""));
+      for (const [re, e] of EMOJI_RULES) if (re.test(s)) return e;
+      return "🍽️";
     },
-    // Tạo link app đặt món trực tiếp
-    getDeliveryLinks(foodName, restaurantName = "") {
-      const q = encodeURIComponent((restaurantName ? restaurantName + " " : "") + foodName);
-      return {
-        shopeeFood: `https://shopeefood.vn/search?q=${q}`,
-        grabFood: `https://food.grab.com/vn/vi/restaurants?search=${q}`,
-        beFood: `https://be.com.vn/`
-      };
-    }
+    money(v) {
+      if (v === null || v === undefined || isNaN(v)) return "";
+      if (v < 1000) return v + "đ";
+      const k = v / 1000;
+      return (Number.isInteger(k) ? k : k.toFixed(1).replace(".", ",")) + "k";
+    },
+    priceText(min, max, fallback = "Bình dân") {
+      const hasMin = min !== null && min !== undefined, hasMax = max !== null && max !== undefined;
+      if (!hasMin && !hasMax) return fallback;
+      if (hasMin && hasMax) return min === max ? U.money(min) : `${U.money(min)} – ${U.money(max)}`;
+      return hasMin ? "từ " + U.money(min) : "≤ " + U.money(max);
+    },
+    dateKey(d = new Date()) {
+      const p = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    },
+    monday(d = new Date()) {
+      const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+      return x;
+    },
+    buzz(p) { if (state.settings.haptics && navigator.vibrate) { try { navigator.vibrate(p); } catch (e) {} } }
   };
 
-  // 4. STORAGE VỚI HIỆU ỨNG THÔNG BÁO TỐI GIẢN
-  const Storage = {
-    get(key, fallback) {
-      try {
-        const item = localStorage.getItem(key);
-        return item ? JSON.parse(item) : fallback;
-      } catch (e) {
-        return fallback;
-      }
-    },
-    set(key, value, message = "Đã lưu tùy chọn") {
-      try {
-        localStorage.setItem(key, JSON.stringify(value));
-        this.flashSilentIndicator(message);
-      } catch (e) {
-        console.warn("Storage error", e);
-      }
-    },
-    flashSilentIndicator(message) {
-      const el = document.getElementById("silent-save-indicator");
-      const txt = document.getElementById("silent-save-text");
-      if (!el) return;
-      if (txt && message) txt.textContent = message;
-      el.classList.remove("opacity-0");
-      setTimeout(() => el.classList.add("opacity-0"), 1600);
-    }
+  function timeInfo() {
+    const h = new Date().getHours();
+    if (h >= 5 && h < 10) return { label: "Bữa sáng", icon: "🌅", kw: ["sang"], hello: "Chào buổi sáng ☀️" };
+    if (h >= 10 && h < 14) return { label: "Bữa trưa", icon: "☀️", kw: ["trua"], hello: "Chào buổi trưa 😋" };
+    if (h >= 14 && h < 17) return { label: "Xế chiều", icon: "🧋", kw: ["vat", "xe", "chieu"], hello: "Chiều rồi, đói chưa? 🧋" };
+    if (h >= 17 && h < 22) return { label: "Bữa tối", icon: "🌙", kw: ["toi"], hello: "Chào buổi tối 🌙" };
+    return { label: "Ăn đêm", icon: "🌃", kw: ["dem"], hello: "Khuya rồi, ăn nhẹ nhé 🌃" };
+  }
+  function findPurposeFor(t) { return state.meta.purposes.find(p => t.kw.some(k => U.norm(p).includes(k))) || null; }
+
+  /* ============================= 4. STORAGE ============================= */
+  const Store = {
+    get(key, fallback) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } },
+    set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { console.warn("Storage error", e); } }
   };
 
-  // 5. API CLIENT JSONP CHO GOOGLE APPS SCRIPT
-  const ApiClient = {
-    fetchWithJsonp(url, params = {}) {
+  /* ============================== 5. API ============================== */
+  const Api = {
+    jsonp(params = {}) {
       return new Promise((resolve, reject) => {
-        const cbName = "agd_cb_" + Math.random().toString(36).substring(2, 9) + "_" + Date.now();
-        params.callback = cbName;
-
-        const query = Object.keys(params)
-          .map(k => encodeURIComponent(k) + "=" + encodeURIComponent(params[k]))
-          .join("&");
-
-        const fullUrl = url + (url.indexOf("?") === -1 ? "?" : "&") + query;
+        const cb = "agd_cb_" + Math.random().toString(36).slice(2, 9) + "_" + Date.now();
+        const q = Object.assign({}, params, { callback: cb });
+        const query = Object.keys(q).map(k => encodeURIComponent(k) + "=" + encodeURIComponent(q[k])).join("&");
         const script = document.createElement("script");
-        script.src = fullUrl;
+        script.src = CONFIG.API_URL + (CONFIG.API_URL.indexOf("?") === -1 ? "?" : "&") + query;
         script.async = true;
-
-        const cleanup = () => {
-          if (window[cbName]) delete window[cbName];
-          if (script.parentNode) script.parentNode.removeChild(script);
+        const cleanup = () => { try { delete window[cb]; } catch (e) { window[cb] = undefined; } if (script.parentNode) script.parentNode.removeChild(script); };
+        const timer = setTimeout(() => { cleanup(); reject(new Error("Máy chủ phản hồi quá lâu, thử lại nhé!")); }, CONFIG.REQUEST_TIMEOUT_MS);
+        window[cb] = (data) => {
+          clearTimeout(timer); cleanup();
+          if (data && data.success) resolve(data); else reject(new Error(data && data.error ? data.error : "Không thể lấy dữ liệu"));
         };
-
-        const timer = setTimeout(() => {
-          cleanup();
-          reject(new Error("Quá thời gian phản hồi từ máy chủ Apps Script!"));
-        }, CONFIG.REQUEST_TIMEOUT_MS);
-
-        window[cbName] = function (data) {
-          clearTimeout(timer);
-          cleanup();
-          if (data && data.success) {
-            resolve(data);
-          } else {
-            reject(new Error(data && data.error ? data.error : "Không thể lấy dữ liệu"));
-          }
-        };
-
-        script.onerror = function () {
-          clearTimeout(timer);
-          cleanup();
-          reject(new Error("Lỗi mạng khi kết nối tới máy chủ Google Apps Script"));
-        };
-
+        script.onerror = () => { clearTimeout(timer); cleanup(); reject(new Error("Lỗi mạng khi kết nối máy chủ")); };
         document.head.appendChild(script);
       });
     },
-
-    async getFoods(forceRefresh = false) {
-      return await this.fetchWithJsonp(CONFIG.API_URL, {
-        action: "getFoods",
-        limit: 150,
-        refresh: forceRefresh ? "true" : "false"
-      });
-    }
+    async fetchAll(force) {
+      let page = 1, totalPages = 1, all = [];
+      do {
+        const res = await this.jsonp({ action: "getFoods", page, limit: 150, refresh: force && page === 1 ? "true" : "false" });
+        all = all.concat(res.data || []);
+        totalPages = (res.meta && res.meta.pagination && res.meta.pagination.totalPages) || 1;
+        page++;
+      } while (page <= totalPages && page <= 10);
+      return all;
+    },
+    getTrending() { return this.jsonp({ action: "getTrending" }); },
+    track(id, type) { this.jsonp({ action: "track", id, type }).catch(() => {}); }
   };
 
-  // 6. THREE.JS 3D MYSTERY BOX STAGE (HỘP BÍ ẨN ẨM THỰC THAY CHO LỒNG BÀN)
-  const ThreeMysteryStage = {
-    scene: null,
-    camera: null,
-    renderer: null,
-    boxGroup: null,
-    boxLid: null,
-    innerCore: null,
-    particles: null,
-    isOpen: false,
-    openProgress: 0,
+  /* ====================== 6. TOAST + CONFETTI + SHEET ====================== */
+  function toast(msg, type = "info") {
+    const c = $("toast-container"); if (!c) return;
+    const t = document.createElement("div");
+    t.className = "toast " + type;
+    t.innerHTML = `<span>${type === "success" ? "✅" : type === "error" ? "⚠️" : "💡"}</span><span>${U.esc(msg)}</span>`;
+    c.appendChild(t);
+    while (c.children.length > 3) c.firstChild.remove();
+    setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 300); }, 2600);
+  }
+
+  function celebrate(emoji) {
+    if (typeof confetti !== "function" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const base = { spread: 85, origin: { y: 0.7 }, ticks: 170, zIndex: 300 };
+    try {
+      if (confetti.shapeFromText) {
+        const shape = confetti.shapeFromText({ text: emoji, scalar: 2 });
+        confetti(Object.assign({}, base, { shapes: [shape], scalar: 2, particleCount: 26 }));
+      }
+    } catch (e) {}
+    confetti(Object.assign({}, base, { particleCount: 60, colors: ["#ff6b3d", "#ff4d8d", "#ffb347", "#34d399", "#8b5cf6"] }));
+  }
+
+  const Sheet = {
+    open: false, pushed: false, mode: null,
+    show(title, html, mode) {
+      $("sheet-title").textContent = title;
+      $("sheet-body").innerHTML = html;
+      this.mode = mode;
+      if (!this.open) {
+        this.open = true;
+        $("sheet").classList.add("open");
+        $("sheet").setAttribute("aria-hidden", "false");
+        document.body.classList.add("no-scroll");
+        try { history.pushState({ agdSheet: 1 }, ""); this.pushed = true; } catch (e) {}
+      }
+      $("sheet-body").scrollTop = 0;
+      icons();
+    },
+    close(fromPop) {
+      if (!this.open) return;
+      this.open = false;
+      $("sheet").classList.remove("open");
+      $("sheet").setAttribute("aria-hidden", "true");
+      document.body.classList.remove("no-scroll");
+      if (this.pushed) {
+        this.pushed = false;
+        if (!fromPop) { try { history.back(); } catch (e) {} }
+      }
+    }
+  };
+  window.addEventListener("popstate", () => { if (Sheet.open) { Sheet.pushed = false; Sheet.close(true); } });
+
+  /* ===================== 7. 3D: TÔ MÌ BỐC KHÓI ===================== */
+  const Stage = {
+    ok: false, visible: true, time: 0, last: 0, vel: 0, dragging: false, moved: 0, lastX: 0,
+    anim: null, orbitAngle: 0, steam: 0.8, orbitItems: [], sprites: [],
 
     init() {
-      const container = document.getElementById("three-stage-container");
-      if (!container || typeof THREE === "undefined") return;
-
-      const width = container.clientWidth || 300;
-      const height = container.clientHeight || 300;
-
-      this.scene = new THREE.Scene();
-      this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-      this.camera.position.set(0, 3.2, 5.0);
-      this.camera.lookAt(0, 0.2, 0);
-
-      this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-      this.renderer.setSize(width, height);
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      container.appendChild(this.renderer.domElement);
-
-      // Studio Neon Lighting
-      const ambLight = new THREE.AmbientLight(0xffffff, 0.8);
-      this.scene.add(ambLight);
-
-      const pointOrange = new THREE.PointLight(0xff5722, 2.8, 12);
-      pointOrange.position.set(2, 3, 3);
-      this.scene.add(pointOrange);
-
-      const pointCyan = new THREE.PointLight(0x06b6d4, 2.0, 10);
-      pointCyan.position.set(-3, -1, -2);
-      this.scene.add(pointCyan);
-
-      // Nhóm khối hộp bí ẩn
-      this.boxGroup = new THREE.Group();
-      this.scene.add(this.boxGroup);
-
-      // Vật liệu thân hộp & nắp
-      const boxMat = new THREE.MeshStandardMaterial({
-        color: 0x161f36,
-        metalness: 0.85,
-        roughness: 0.2,
-      });
-
-      const goldTrimMat = new THREE.MeshStandardMaterial({
-        color: 0xffa000,
-        metalness: 0.95,
-        roughness: 0.15,
-        emissive: 0xff6f00,
-        emissiveIntensity: 0.25
-      });
-
-      // 1. Thân hộp (Base)
-      const baseGeo = new THREE.BoxGeometry(2.0, 1.2, 2.0);
-      const baseMesh = new THREE.Mesh(baseGeo, boxMat);
-      baseMesh.position.y = -0.1;
-      this.boxGroup.add(baseMesh);
-
-      // Đai vàng viền thân hộp
-      const rimGeo = new THREE.BoxGeometry(2.05, 0.15, 2.05);
-      const rimMesh = new THREE.Mesh(rimGeo, goldTrimMat);
-      rimMesh.position.y = 0.45;
-      this.boxGroup.add(rimMesh);
-
-      // 2. Nắp hộp (Lid)
-      this.boxLid = new THREE.Group();
-      this.boxLid.position.y = 0.55;
-
-      const lidGeo = new THREE.BoxGeometry(2.1, 0.35, 2.1);
-      const lidMesh = new THREE.Mesh(lidGeo, boxMat);
-      this.boxLid.add(lidMesh);
-
-      const lidKnob = new THREE.Mesh(new THREE.OctahedronGeometry(0.3, 0), goldTrimMat);
-      lidKnob.position.y = 0.35;
-      this.boxLid.add(lidKnob);
-
-      this.boxGroup.add(this.boxLid);
-
-      // 3. Lõi năng lượng ngọc ẩm thực (Inner glowing food core)
-      const coreGeo = new THREE.IcosahedronGeometry(0.48, 1);
-      const coreMat = new THREE.MeshStandardMaterial({
-        color: 0xff5722,
-        emissive: 0xff7043,
-        emissiveIntensity: 0.8,
-        wireframe: false
-      });
-      this.innerCore = new THREE.Mesh(coreGeo, coreMat);
-      this.innerCore.position.y = 0.2;
-      this.innerCore.scale.set(0.01, 0.01, 0.01);
-      this.boxGroup.add(this.innerCore);
-
-      // 4. Hạt bụi ánh sáng thần kỳ (Particles)
-      const pCount = 60;
-      const pGeo = new THREE.BufferGeometry();
-      const pPos = new Float32Array(pCount * 3);
-      for (let i = 0; i < pCount * 3; i += 3) {
-        pPos[i] = (Math.random() - 0.5) * 2.8;
-        pPos[i + 1] = Math.random() * 2.0;
-        pPos[i + 2] = (Math.random() - 0.5) * 2.8;
-      }
-      pGeo.setAttribute("position", new THREE.BufferAttribute(pPos, 3));
-      const pMat = new THREE.PointsMaterial({
-        size: 0.08,
-        color: 0xffb74d,
-        transparent: true,
-        opacity: 0.2
-      });
-      this.particles = new THREE.Points(pGeo, pMat);
-      this.scene.add(this.particles);
-
-      // Vòng lặp Render Animation
-      const animate = () => {
-        requestAnimationFrame(animate);
-
-        this.particles.rotation.y += 0.003;
-
-        if (!this.isOpen) {
-          // Xoay nhẹ nhàng chờ mở
-          this.boxGroup.rotation.y += 0.008;
-          this.boxGroup.position.y = Math.sin(Date.now() * 0.003) * 0.06;
-          this.innerCore.scale.set(0.01, 0.01, 0.01);
-        } else {
-          // Hiệu ứng mở nắp giật tung bay lên cao
-          if (this.openProgress < 1) {
-            this.openProgress += 0.045;
-            const ease = Math.sin(this.openProgress * Math.PI / 2);
-            
-            this.boxLid.position.y = 0.55 + ease * 2.2;
-            this.boxLid.rotation.x = -ease * 0.6;
-            this.boxLid.rotation.y += 0.15;
-
-            const coreScale = THREE.MathUtils.lerp(0.01, 1.25, ease);
-            this.innerCore.scale.set(coreScale, coreScale, coreScale);
-            this.innerCore.rotation.x += 0.05;
-            this.innerCore.rotation.y += 0.08;
-
-            this.particles.material.opacity = 0.9;
-          }
-        }
-
-        this.renderer.render(this.scene, this.camera);
-      };
-      animate();
-
-      window.addEventListener("resize", () => {
-        if (!container || !this.camera || !this.renderer) return;
-        const w = container.clientWidth;
-        const h = container.clientHeight;
-        this.camera.aspect = w / h;
-        this.camera.updateProjectionMatrix();
-        this.renderer.setSize(w, h);
-      });
+      this.box = $("three-stage");
+      if (!this.box) return;
+      try { this.build(); this.ok = true; }
+      catch (err) { console.warn("3D fallback:", err); this.fallback(); }
     },
 
-    triggerOpen(callback) {
-      if (!this.boxLid) {
-        if (callback) callback();
+    fallback() {
+      this.box.innerHTML = '<div class="stage-fallback" id="stage-fb">🍜</div>';
+      $("stage-fb").addEventListener("click", () => App.spin());
+    },
+
+    caption(t) { const el = $("stage-caption"); if (el) el.textContent = t; },
+
+    tint(hue) { if (this.ok) this.tintColor.setHSL(hue / 360, 0.78, 0.55); },
+
+    build() {
+      if (typeof THREE === "undefined") throw new Error("THREE missing");
+      const box = this.box;
+      const w = box.clientWidth || 340, h = box.clientHeight || 300;
+
+      const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(w, h);
+      box.appendChild(renderer.domElement);
+      this.renderer = renderer;
+
+      const scene = new THREE.Scene();
+      this.scene = scene;
+      this.camera = new THREE.PerspectiveCamera(38, w / h, 0.1, 60);
+
+      // Ánh sáng
+      scene.add(new THREE.HemisphereLight(0xfff1e6, 0x2a1a3a, 0.95));
+      const key = new THREE.DirectionalLight(0xffffff, 1.35); key.position.set(4, 8, 6); scene.add(key);
+      const rim = new THREE.DirectionalLight(0x8b5cf6, 0.8); rim.position.set(-5, 3, -4); scene.add(rim);
+      const warm = new THREE.PointLight(0xff7a3d, 1.1, 12); warm.position.set(0, 0.6, 2.4); scene.add(warm);
+
+      const rig = new THREE.Group(); scene.add(rig); this.rig = rig;
+      const bowl = new THREE.Group(); rig.add(bowl); this.bowl = bowl;
+
+      // Bóng đổ
+      const sc = document.createElement("canvas"); sc.width = sc.height = 128;
+      const sx = sc.getContext("2d");
+      const grd = sx.createRadialGradient(64, 64, 4, 64, 64, 62);
+      grd.addColorStop(0, "rgba(0,0,0,.5)"); grd.addColorStop(1, "rgba(0,0,0,0)");
+      sx.fillStyle = grd; sx.fillRect(0, 0, 128, 128);
+      const shadow = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc), transparent: true, depthWrite: false }));
+      shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.01; scene.add(shadow);
+
+      // Tô (Lathe)
+      const prof = [[0, 0], [0.6, 0], [0.68, 0.07], [0.95, 0.32], [1.38, 0.78], [1.64, 1.16], [1.72, 1.32], [1.67, 1.34], [1.6, 1.22], [1.3, 0.8], [0.9, 0.42], [0, 0.3]]
+        .map(p => new THREE.Vector2(p[0], p[1]));
+      this.bowlMat = new THREE.MeshStandardMaterial({ color: 0xff6b3d, roughness: 0.32, metalness: 0.08, side: THREE.DoubleSide });
+      this.tintColor = new THREE.Color(0xff6b3d);
+      bowl.add(new THREE.Mesh(new THREE.LatheGeometry(prof, 56), this.bowlMat));
+
+      const cream = new THREE.MeshStandardMaterial({ color: 0xfff3df, roughness: 0.4 });
+      [[1.695, 1.33, 0.045], [1.522, 0.98, 0.035], [1.236, 0.62, 0.03]].forEach(([r, y, t]) => {
+        const tor = new THREE.Mesh(new THREE.TorusGeometry(r, t, 10, 64), cream);
+        tor.rotation.x = Math.PI / 2; tor.position.y = y; bowl.add(tor);
+      });
+
+      // Nước dùng + mì
+      const broth = new THREE.Mesh(new THREE.CircleGeometry(1.42, 48),
+        new THREE.MeshStandardMaterial({ color: 0xf0a23a, roughness: 0.2, emissive: 0x7a3a00, emissiveIntensity: 0.35 }));
+      broth.rotation.x = -Math.PI / 2; broth.position.y = 1.02; bowl.add(broth);
+
+      const noodleMat = new THREE.MeshStandardMaterial({ color: 0xfde7b0, roughness: 0.55 });
+      const mound = new THREE.Mesh(new THREE.SphereGeometry(0.95, 24, 16), noodleMat);
+      mound.scale.set(1, 0.38, 1); mound.position.y = 1.03; bowl.add(mound);
+      for (let i = 0; i < 6; i++) {
+        const t = new THREE.Mesh(new THREE.TorusGeometry(0.25 + i * 0.15, 0.045, 8, 40), noodleMat);
+        t.rotation.x = Math.PI / 2 + (Math.random() - 0.5) * 0.25; t.rotation.y = (Math.random() - 0.5) * 0.25;
+        t.position.y = 1.12 + (i % 2) * 0.03; bowl.add(t);
+      }
+
+      // Topping: trứng, thịt, hành, ớt, rau
+      const egg = new THREE.Mesh(new THREE.SphereGeometry(0.32, 20, 14), new THREE.MeshStandardMaterial({ color: 0xfffaf0, roughness: 0.3 }));
+      egg.scale.set(1, 0.55, 1); egg.position.set(-0.55, 1.28, 0.4); bowl.add(egg);
+      const yolk = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffb300, roughness: 0.25 }));
+      yolk.scale.set(1, 0.8, 1); yolk.position.set(-0.55, 1.45, 0.4); bowl.add(yolk);
+
+      [[0.5, 1.3, 0.45, 0.2], [0.72, 1.27, -0.12, -0.15], [0.22, 1.34, 0.12, 0.1]].forEach(([x, y, z, r], i) => {
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.05, 20), new THREE.MeshStandardMaterial({ color: i % 2 ? 0xc96a4f : 0xb5523b, roughness: 0.5 }));
+        m.position.set(x, y, z); m.rotation.set(r, i, r * 0.6); bowl.add(m);
+      });
+      const green = new THREE.MeshStandardMaterial({ color: 0x4ade80, roughness: 0.5 });
+      for (let i = 0; i < 12; i++) {
+        const a = Math.random() * Math.PI * 2, r = Math.random() * 0.95;
+        const s = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.15, 8), green);
+        s.position.set(Math.cos(a) * r, 1.36 + Math.random() * 0.05, Math.sin(a) * r);
+        s.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3); bowl.add(s);
+      }
+      const chili = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.03, 8, 16), new THREE.MeshStandardMaterial({ color: 0xdc2626 }));
+      chili.rotation.x = Math.PI / 2; chili.position.set(0.1, 1.4, -0.5); bowl.add(chili);
+      [[-0.3, 1.33, -0.5], [0.15, 1.35, -0.7], [-0.75, 1.3, -0.2]].forEach(([x, y, z]) => {
+        const lf = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 8), new THREE.MeshStandardMaterial({ color: 0x22a45d, roughness: 0.6 }));
+        lf.scale.set(1, 0.15, 0.6); lf.position.set(x, y, z); lf.rotation.y = x * 4; bowl.add(lf);
+      });
+
+      // Đũa gác ngang miệng tô
+      const wood = new THREE.MeshStandardMaterial({ color: 0xe0a96d, roughness: 0.6 });
+      const chop = new THREE.Group();
+      [0.55, 0.72].forEach(z => {
+        const c = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.026, 3.5, 10), wood);
+        c.rotation.z = Math.PI / 2; c.position.z = z; chop.add(c);
+      });
+      chop.position.set(0, 1.55, 0); chop.rotation.set(0, 0.35, 0.16); bowl.add(chop);
+
+      // Hơi nước
+      const stc = document.createElement("canvas"); stc.width = stc.height = 64;
+      const sctx = stc.getContext("2d");
+      const sg = sctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+      sg.addColorStop(0, "rgba(255,255,255,.9)"); sg.addColorStop(1, "rgba(255,255,255,0)");
+      sctx.fillStyle = sg; sctx.fillRect(0, 0, 64, 64);
+      const steamTex = new THREE.CanvasTexture(stc);
+      for (let i = 0; i < 16; i++) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: steamTex, transparent: true, opacity: 0, depthWrite: false }));
+        sp.userData = { life: Math.random(), speed: 0.22 + Math.random() * 0.18, x0: (Math.random() - 0.5) * 1.3, z0: (Math.random() - 0.5) * 1.3, ph: Math.random() * 6 };
+        bowl.add(sp); this.sprites.push(sp);
+      }
+
+      // Nguyên liệu bay quanh
+      const defs = [
+        [new THREE.SphereGeometry(0.26, 20, 16), 0xef4444, [1, 0.92, 1]],
+        [new THREE.ConeGeometry(0.12, 0.55, 12), 0xdc2626, [1, 1, 1]],
+        [new THREE.SphereGeometry(0.24, 18, 14), 0x84cc16, [1, 0.8, 1]],
+        [new THREE.SphereGeometry(0.22, 18, 14), 0xfafafa, [0.85, 1.15, 0.85]],
+        [new THREE.TorusGeometry(0.2, 0.07, 10, 24), 0xfbbf24, [1, 1, 1]],
+        [new THREE.OctahedronGeometry(0.22), 0xa855f7, [1, 1, 1]]
+      ];
+      defs.forEach(([geo, color, sc2]) => {
+        const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.05 }));
+        m.scale.set(sc2[0], sc2[1], sc2[2]); rig.add(m); this.orbitItems.push(m);
+      });
+
+      this.fit();
+      if (window.ResizeObserver) new ResizeObserver(() => this.fit()).observe(box);
+      else window.addEventListener("resize", () => this.fit());
+      if (window.IntersectionObserver) new IntersectionObserver((es) => { this.visible = es[0].isIntersecting; }).observe(box);
+
+      // Kéo để xoay / chạm để khui
+      const el = renderer.domElement;
+      el.addEventListener("pointerdown", (e) => {
+        this.dragging = true; this.moved = 0; this.lastX = e.clientX;
+        try { el.setPointerCapture(e.pointerId); } catch (_) {}
+      });
+      el.addEventListener("pointermove", (e) => {
+        if (!this.dragging) return;
+        const dx = e.clientX - this.lastX; this.lastX = e.clientX;
+        this.moved += Math.abs(dx); this.vel = dx * 0.012; this.rig.rotation.y += this.vel;
+      });
+      const up = () => { if (!this.dragging) return; this.dragging = false; if (this.moved < 8) App.spin(); };
+      el.addEventListener("pointerup", up);
+      el.addEventListener("pointercancel", () => { this.dragging = false; });
+
+      this.loop = this.loop.bind(this);
+      requestAnimationFrame(this.loop);
+    },
+
+    fit() {
+      if (!this.renderer) return;
+      const w = this.box.clientWidth, h = this.box.clientHeight;
+      if (!w || !h) return;
+      this.renderer.setSize(w, h);
+      const aspect = w / h;
+      this.camera.aspect = aspect;
+      const d = 8.4 * Math.max(1, 1.12 / aspect);
+      this.camera.position.set(0, d * 0.37, d * 0.93);
+      this.camera.lookAt(0, 1.15, 0);
+      this.camera.updateProjectionMatrix();
+    },
+
+    play(onReveal, onDone) {
+      if (!this.ok || !this.visible) {
+        const fb = $("stage-fb"); if (fb) fb.classList.add("bounce");
+        setTimeout(() => { onReveal && onReveal(); if (fb) fb.classList.remove("bounce"); onDone && onDone(); }, this.ok ? 50 : 900);
         return;
       }
+      this.anim = { t: 0, dur: 1.55, fired: false, onReveal, onDone };
+    },
 
-      this.isOpen = true;
-      this.openProgress = 0;
-      Utils.vibrate([60, 40, 80]);
+    loop(now) {
+      requestAnimationFrame(this.loop);
+      if (!this.visible || document.hidden) { this.last = now; return; }
+      const dt = Math.min(0.05, (now - this.last) / 1000 || 0.016);
+      this.last = now; this.time += dt;
 
-      const caption = document.getElementById("stage-status-caption");
-      if (caption) caption.textContent = "⚡ Đang mở hộp báu vật...";
-
-      // Rung lắc kích thích trước khi nắp bật lên
-      let shakes = 0;
-      const shakeTimer = setInterval(() => {
-        this.boxGroup.position.x = (Math.random() - 0.5) * 0.12;
-        shakes++;
-        if (shakes > 6) {
-          clearInterval(shakeTimer);
-          this.boxGroup.position.x = 0;
+      let lift = 0, squash = 0, spinY = 0, wob = 0, boost = 0;
+      const a = this.anim;
+      if (a) {
+        a.t = Math.min(1, a.t + dt / a.dur);
+        const t = a.t;
+        if (t < 0.18) {
+          const u = t / 0.18; squash = 0.14 * Math.sin(u * Math.PI / 2); this.bowl.position.x = Math.sin(u * 40) * 0.04 * u;
+        } else if (t < 0.78) {
+          const u = (t - 0.18) / 0.6;
+          lift = Math.sin(u * Math.PI) * 1.7;
+          spinY = (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2) * Math.PI * 2;
+          wob = Math.sin(u * Math.PI * 2) * 0.16; boost = Math.sin(u * Math.PI); this.bowl.position.x = 0;
+        } else {
+          const u = (t - 0.78) / 0.22; squash = 0.1 * Math.sin(u * Math.PI) * (1 - u); spinY = Math.PI * 2;
         }
-      }, 40);
+        if (!a.fired && t >= 0.8) { a.fired = true; a.onReveal && a.onReveal(); }
+        if (t >= 1) { this.anim = null; spinY = 0; this.bowl.position.x = 0; a.onDone && a.onDone(); }
+      }
 
-      setTimeout(() => {
-        if (callback) callback();
-        if (caption) caption.textContent = "Báu vật ẩm thực đã xuất hiện!";
+      // Xoay theo ngón tay + quán tính
+      if (!this.dragging) { this.vel *= 0.95; this.rig.rotation.y += this.vel + dt * (a ? 0 : 0.3); }
 
-        // Tự động đóng nắp lại sau 3.5s để sẵn sàng cho lần quay tiếp
-        setTimeout(() => {
-          const closeTimer = setInterval(() => {
-            this.openProgress -= 0.05;
-            const ease = Math.max(0, this.openProgress);
-            this.boxLid.position.y = 0.55 + ease * 2.2;
-            this.boxLid.rotation.x = -ease * 0.6;
+      this.bowl.position.y = Math.sin(this.time * 1.8) * 0.05 + lift;
+      this.bowl.rotation.y = spinY; this.bowl.rotation.z = wob;
+      this.bowl.scale.set(1 + squash * 0.5, 1 - squash, 1 + squash * 0.5);
+      this.bowlMat.color.lerp(this.tintColor, Math.min(1, dt * 4));
 
-            const coreScale = THREE.MathUtils.lerp(0.01, 1.25, ease);
-            this.innerCore.scale.set(coreScale, coreScale, coreScale);
+      // Nguyên liệu bay vòng quanh
+      this.orbitAngle += dt * (0.55 + boost * 7);
+      const n = this.orbitItems.length, R = 2.45 + boost * 0.5;
+      this.orbitItems.forEach((m, i) => {
+        const ang = this.orbitAngle + i * (Math.PI * 2 / n);
+        m.position.set(Math.cos(ang) * R, 1.9 + Math.sin(this.time * 1.5 + i * 1.3) * 0.18 + lift * 0.4, Math.sin(ang) * R);
+        m.rotation.x += dt * (1 + i * 0.2); m.rotation.y += dt * 1.3;
+      });
 
-            if (this.openProgress <= 0) {
-              clearInterval(closeTimer);
-              this.isOpen = false;
-              this.boxLid.position.y = 0.55;
-              this.boxLid.rotation.x = 0;
-              this.particles.material.opacity = 0.2;
-              if (caption) caption.textContent = "Hộp Thần Bí Đang Chờ Mở";
-            }
-          }, 25);
-        }, 3600);
-      }, 600);
+      // Hơi nước
+      this.steam += ((a ? 2.2 : 0.8) - this.steam) * Math.min(1, dt * 3);
+      this.sprites.forEach(sp => {
+        const d = sp.userData;
+        d.life += dt * d.speed * (0.8 + this.steam * 0.5);
+        if (d.life > 1) { d.life = 0; d.x0 = (Math.random() - 0.5) * 1.3; d.z0 = (Math.random() - 0.5) * 1.3; }
+        sp.position.set(d.x0 + Math.sin(d.life * 6 + d.ph) * 0.15, 1.5 + d.life * 2.3, d.z0);
+        const s = 0.5 + d.life * 1.1; sp.scale.set(s, s, 1);
+        sp.material.opacity = Math.sin(d.life * Math.PI) * 0.26 * this.steam;
+      });
+
+      this.renderer.render(this.scene, this.camera);
     }
   };
 
-  // 7. TOAST THÔNG BÁO HIỆN ĐẠI
-  function showToast(message, type = "info") {
-    const container = document.getElementById("toast-container");
-    if (!container) return;
-
-    const toast = document.createElement("div");
-    toast.className = "flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold shadow-2xl backdrop-blur-xl border transition-all duration-300 pointer-events-auto transform translate-y-4 opacity-0";
-
-    if (type === "success") {
-      toast.classList.add("bg-dark-900/95", "text-emerald-300", "border-emerald-500/50");
-      toast.innerHTML = `<i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i><span>${Utils.escapeHTML(message)}</span>`;
-    } else if (type === "error") {
-      toast.classList.add("bg-rose-950/95", "text-rose-200", "border-rose-500/50");
-      toast.innerHTML = `<i data-lucide="alert-circle" class="w-4 h-4 text-rose-400"></i><span>${Utils.escapeHTML(message)}</span>`;
-    } else {
-      toast.classList.add("bg-dark-900/95", "text-white", "border-brand-500/40");
-      toast.innerHTML = `<i data-lucide="sparkles" class="w-4 h-4 text-brand-400"></i><span>${Utils.escapeHTML(message)}</span>`;
+  /* ===================== 8. LẮC ĐIỆN THOẠI ===================== */
+  const Shake = (() => {
+    let on = false, last = 0, prev = null;
+    function handler(e) {
+      const a = e.accelerationIncludingGravity; if (!a) return;
+      const m = Math.abs(a.x || 0) + Math.abs(a.y || 0) + Math.abs(a.z || 0);
+      if (prev !== null && Math.abs(m - prev) > 26) {
+        const now = Date.now();
+        if (now - last > 1500 && state.settings.shake && state.view === "home" && !Sheet.open && !state.busy) { last = now; App.spin(); }
+      }
+      prev = m;
     }
-
-    container.appendChild(toast);
-    lucide.createIcons();
-
-    requestAnimationFrame(() => toast.classList.remove("translate-y-4", "opacity-0"));
-
-    setTimeout(() => {
-      toast.classList.add("translate-y-2", "opacity-0");
-      setTimeout(() => toast.remove(), 300);
-    }, 3200);
-  }
-
-  // 8. BẮN PHÁO HOA ĂN MỪNG
-  function fireConfetti() {
-    if (typeof confetti === "function") {
-      confetti({
-        particleCount: 70,
-        spread: 60,
-        origin: { y: 0.7 },
-        colors: ['#ff5722', '#10b981', '#f59e0b', '#06b6d4', '#ec4899']
-      });
-    }
-  }
-
-  // 9. THUẬT TOÁN CHỌN MÓN THÔNG MINH
-  const FoodEngine = {
-    getCandidates() {
-      const f = state.activeFilters;
-      let list = state.foods.slice();
-
-      if (f.purpose && f.purpose !== "all") {
-        list = list.filter(item => item.purposes && item.purposes.includes(f.purpose));
+    return {
+      async enable() {
+        if (on || typeof DeviceMotionEvent === "undefined") return;
+        try {
+          if (typeof DeviceMotionEvent.requestPermission === "function") {
+            const r = await DeviceMotionEvent.requestPermission();
+            if (r !== "granted") return;
+          }
+          window.addEventListener("devicemotion", handler); on = true;
+        } catch (e) {}
       }
+    };
+  })();
 
-      if (f.group && f.group !== "all") {
-        list = list.filter(item => item.group === f.group);
+  /* ============================ 9. ENGINE ============================ */
+  const Engine = {
+    priceOk(i, b) {
+      if (!b || b === "all") return true;
+      const [k, v] = b.split(":"), n = Number(v);
+      if (k === "max") return i.minPrice === null || i.minPrice === undefined || i.minPrice <= n;
+      if (k === "min") { const top = i.maxPrice != null ? i.maxPrice : (i.minPrice != null ? i.minPrice : 0); return top >= n; }
+      return true;
+    },
+    matches(i, { purpose = true } = {}) {
+      const f = state.filters;
+      if (purpose && f.purpose !== "all" && !(i.purposes || []).includes(f.purpose)) return false;
+      if (f.group !== "all" && i.group !== f.group) return false;
+      if (f.district !== "all" && !(i.districts || []).includes(f.district)) return false;
+      return this.priceOk(i, f.budget);
+    },
+    pool({ recent = false } = {}) {
+      let list = state.foods.filter(i => !isBlocked(i.id) && this.matches(i));
+      if (recent && state.filters.excludeRecent) {
+        const ids = new Set(state.history.slice(0, CONFIG.RECENT_EXCLUDE).map(h => h.id));
+        const fresh = list.filter(i => !ids.has(i.id));
+        if (fresh.length) list = fresh;
       }
-
-      if (f.district && f.district !== "all") {
-        list = list.filter(item => item.districts && item.districts.includes(f.district));
-      }
-
-      if (f.maxBudget && f.maxBudget !== "all") {
-        const budget = parseInt(f.maxBudget, 10);
-        list = list.filter(item => {
-          if (item.minPrice === null) return true;
-          return item.minPrice <= budget;
-        });
-      }
-
-      // Loại trừ các món vừa ăn gần đây
-      if (f.excludeRecent && state.history.length > 0) {
-        const recentIds = state.history.slice(0, 5).map(h => h.id);
-        const filtered = list.filter(item => !recentIds.includes(item.id));
-        if (filtered.length > 0) list = filtered;
-      }
-
       return list;
     },
-
-    spin() {
-      const candidates = this.getCandidates();
-      if (!candidates.length) return null;
-      const index = Math.floor(Math.random() * candidates.length);
-      return candidates[index];
+    pick(list) {
+      if (!list.length) return null;
+      const boost = state.settings.favBoost;
+      const w = list.map(i => (boost && isFav(i.id) ? 2 : 1));
+      let r = Math.random() * w.reduce((a, b) => a + b, 0);
+      for (let k = 0; k < list.length; k++) { r -= w[k]; if (r <= 0) return list[k]; }
+      return list[list.length - 1];
+    },
+    exploreList() {
+      const kw = U.norm(state.keyword);
+      let list = state.foods.filter(i => !isBlocked(i.id) && this.matches(i));
+      if (kw) list = list.filter(i => U.norm(`${i.name} ${i.group} ${(i.districts || []).join(" ")} ${(i.purposes || []).join(" ")}`).includes(kw));
+      const s = state.filters.sort;
+      if (s === "price-asc") list.sort((a, b) => (a.minPrice ?? 1e12) - (b.minPrice ?? 1e12));
+      else if (s === "price-desc") list.sort((a, b) => (b.maxPrice ?? -1) - (a.maxPrice ?? -1));
+      else if (s === "venues") list.sort((a, b) => (b.venues || []).length - (a.venues || []).length);
+      else if (s === "name") list.sort((a, b) => a.name.localeCompare(b.name, "vi"));
+      return list;
     }
   };
 
-  // 10. GIAO DIỆN & TƯƠNG TÁC NGƯỜI DÙNG (MOBILE-FIRST)
+  /* ====================== 10. FAVORITES / BLOCK / HISTORY ====================== */
+  function setFav(food, on, silent) {
+    const idx = state.favorites.findIndex(f => f.id === food.id);
+    if (on && idx === -1) {
+      state.favorites.unshift({ id: food.id, name: food.name, group: food.group });
+      Api.track(food.id, "save");
+      if (!silent) toast(`Đã lưu "${food.name}"`, "success");
+    } else if (!on && idx > -1) {
+      state.favorites.splice(idx, 1);
+      if (!silent) toast(`Đã bỏ lưu "${food.name}"`);
+    }
+    Store.set(CONFIG.KEYS.FAV, state.favorites);
+    syncFavButtons();
+    if (state.view === "me") UI.renderMe();
+    U.buzz(12);
+  }
+  function syncFavButtons() {
+    $$("[data-fav]").forEach(b => b.classList.toggle("on", isFav(b.dataset.fav)));
+    $$('[data-act="fav"]').forEach(b => b.classList.toggle("on", state.current && isFav(state.current.id)));
+  }
+  function setBlock(food, on) {
+    const idx = state.blocked.findIndex(f => f.id === food.id);
+    if (on && idx === -1) state.blocked.unshift({ id: food.id, name: food.name, group: food.group });
+    if (!on && idx > -1) state.blocked.splice(idx, 1);
+    Store.set(CONFIG.KEYS.BLOCK, state.blocked);
+    onFiltersChanged(true);
+  }
+  function addHistory(food) {
+    state.history.unshift({ id: food.id, name: food.name, group: food.group, ts: Date.now() });
+    if (state.history.length > CONFIG.HISTORY_MAX) state.history.length = CONFIG.HISTORY_MAX;
+    Store.set(CONFIG.KEYS.HIST, state.history);
+    Api.track(food.id, "pick");
+  }
+  function calcStreak() {
+    const days = new Set(state.history.map(h => U.dateKey(new Date(h.ts))));
+    const d = new Date();
+    if (!days.has(U.dateKey(d))) { d.setDate(d.getDate() - 1); if (!days.has(U.dateKey(d))) return 0; }
+    let n = 0;
+    while (days.has(U.dateKey(d))) { n++; d.setDate(d.getDate() - 1); }
+    return n;
+  }
+  async function shareFood(food) {
+    const v = food.venues && food.venues[0];
+    const text = `Hôm nay mình ăn ${food.name}${v ? " ở " + v.restaurant : ""}! 😋`;
+    const data = { title: `Hôm nay ăn ${food.name}!`, text, url: location.href };
+    if (navigator.share) { try { await navigator.share(data); } catch (_) {} }
+    else { try { await navigator.clipboard.writeText(`${text} ${location.href}`); toast("Đã sao chép nội dung chia sẻ", "success"); } catch (_) { toast("Không thể sao chép tự động", "error"); } }
+  }
+
+  /* ============================ 11. UI ============================ */
   const UI = {
-    initElements() {
-      this.dom = {
-        foodsGrid: document.getElementById("foods-grid-container"),
-        foodCountLabel: document.getElementById("food-count-label"),
-        searchBox: document.getElementById("search-box"),
-        candidatesCounter: document.getElementById("filtered-candidates-counter"),
-        filterPurpose: document.getElementById("filter-purpose"),
-        filterGroup: document.getElementById("filter-group"),
-        filterDistrict: document.getElementById("filter-district"),
-        filterBudget: document.getElementById("filter-budget"),
-        chkExcludeRecent: document.getElementById("chk-exclude-recent"),
-        btnResetFilters: document.getElementById("btn-reset-filters"),
-        btnHeroSpin: document.getElementById("btn-hero-spin"),
-        spinBtnLabel: document.getElementById("spin-btn-label"),
-        btnSpinAgain: document.getElementById("btn-spin-again"),
-        btnScrollMenu: document.getElementById("btn-scroll-menu"),
-        smartTimePill: document.getElementById("smart-time-pill"),
-        smartTimeText: document.getElementById("smart-time-text"),
-        liveClock: document.getElementById("live-clock"),
-        btnRequestGps: document.getElementById("btn-request-gps"),
-        gpsLocationText: document.getElementById("gps-location-text"),
-        randomSection: document.getElementById("random-result-section"),
-        resName: document.getElementById("res-food-name"),
-        resDesc: document.getElementById("res-food-desc"),
-        resMetaChips: document.getElementById("res-meta-chips"),
-        resVenuesCount: document.getElementById("res-venues-count"),
-        resVenuesContainer: document.getElementById("res-venues-container"),
-        linkShopeeFood: document.getElementById("link-shopeefood"),
-        linkGrabFood: document.getElementById("link-grabfood"),
-        linkBeFood: document.getElementById("link-befood"),
-        btnShareRes: document.getElementById("btn-share-res"),
-        btnToggleFavRes: document.getElementById("btn-toggle-fav-res"),
-        modal: document.getElementById("detail-modal"),
-        modalTitle: document.getElementById("modal-title"),
-        modalBody: document.getElementById("modal-body-content"),
-        modalCloseBtn: document.getElementById("modal-close-btn"),
-        favBadge: document.getElementById("fav-count-badge"),
-        btnOpenFavorites: document.getElementById("btn-open-favorites"),
-        btnOpenHistory: document.getElementById("btn-open-history"),
-        btnForceRefresh: document.getElementById("btn-force-refresh"),
-        tabNavRandom: document.getElementById("tab-nav-random"),
-        tabNavExplore: document.getElementById("tab-nav-explore"),
-        tabNavFav: document.getElementById("tab-nav-favorites"),
-        tabNavHist: document.getElementById("tab-nav-history")
-      };
-    },
-
-    populateFilterOptions() {
-      const { groups, purposes, districts } = state.filtersMeta;
-
-      if (purposes?.length) {
-        this.dom.filterPurpose.innerHTML = '<option value="all">Tất cả bữa ăn</option>' +
-          purposes.map(p => `<option value="${Utils.escapeHTML(p)}">${Utils.escapeHTML(p)}</option>`).join("");
-      }
-
-      if (groups?.length) {
-        this.dom.filterGroup.innerHTML = '<option value="all">Tất cả nhóm món</option>' +
-          groups.map(g => `<option value="${Utils.escapeHTML(g)}">${Utils.escapeHTML(g)}</option>`).join("");
-      }
-
-      if (districts?.length) {
-        this.dom.filterDistrict.innerHTML = '<option value="all">Tất cả khu vực</option>' +
-          districts.map(d => `<option value="${Utils.escapeHTML(d)}">${Utils.escapeHTML(d)}</option>`).join("");
-      }
+    rowHtml(item) {
+      const vc = item.venues ? item.venues.length : 0;
+      return `
+        <article class="row" data-open="${U.esc(item.id)}">
+          <div class="row-emoji" style="background:${U.grad(item)}">${U.emoji(item)}</div>
+          <div class="row-main">
+            <h4>${U.esc(item.name)}</h4>
+            <p>${U.esc(item.description || item.group)}</p>
+            <div class="row-meta"><span class="price">${U.esc(U.priceText(item.minPrice, item.maxPrice))}</span>${vc ? `<span>📍 ${vc} quán</span>` : ""}<span>${U.esc(item.group)}</span></div>
+          </div>
+          <button class="fav-btn ${isFav(item.id) ? "on" : ""}" data-fav="${U.esc(item.id)}" aria-label="Lưu món"><i data-lucide="heart"></i></button>
+        </article>`;
     },
 
     renderSkeleton() {
-      let html = "";
-      for (let i = 0; i < 6; i++) {
-        html += `
-          <div class="relative overflow-hidden glass-panel rounded-2xl p-5 h-48 flex flex-col justify-between">
-            <div class="skeleton-dark absolute inset-0"></div>
-            <div class="space-y-3">
-              <div class="w-20 h-4 bg-white/10 rounded-full"></div>
-              <div class="w-3/4 h-6 bg-white/10 rounded-xl"></div>
-              <div class="w-full h-3 bg-white/5 rounded"></div>
-            </div>
-            <div class="w-24 h-5 bg-white/10 rounded-full"></div>
-          </div>
-        `;
-      }
-      this.dom.foodsGrid.innerHTML = html;
+      $("foods-grid-container").innerHTML = '<div class="skeleton"></div>'.repeat(6);
     },
 
-    renderFoodsList(foods) {
-      if (!foods || foods.length === 0) {
-        this.dom.foodsGrid.innerHTML = `
-          <div class="col-span-full text-center py-12 px-4 glass-panel rounded-2xl border border-dashed border-white/10">
-            <i data-lucide="soup" class="w-10 h-10 text-slate-500 mx-auto mb-2"></i>
-            <h3 class="text-sm font-bold text-white">Không tìm thấy món ăn phù hợp</h3>
-            <p class="text-xs text-slate-400 mt-1">Hãy thử xóa bộ lọc hoặc mở rộng ngân sách bạn nhé!</p>
-            <button onclick="document.getElementById('btn-reset-filters').click()" class="mt-3 px-4 py-2 rounded-xl bg-brand-600 text-white font-bold text-xs active:scale-95 transition-all">
-              Đặt lại bộ lọc
-            </button>
-          </div>
-        `;
-        this.dom.foodCountLabel.textContent = "0 món ăn";
-        lucide.createIcons();
-        return;
-      }
-
-      this.dom.foodCountLabel.textContent = `Hiển thị ${foods.length} món ngon chuẩn vị`;
-
-      const cardsHtml = foods.map(item => {
-        const isFav = state.favorites.some(f => f.id === item.id);
-        const venueCount = item.venues ? item.venues.length : 0;
-        const priceText = item.minPrice !== null && item.maxPrice !== null
-          ? (item.minPrice === item.maxPrice ? Utils.formatCurrency(item.minPrice) : `${Utils.formatCurrency(item.minPrice)} - ${Utils.formatCurrency(item.maxPrice)}`)
-          : (item.minPrice ? Utils.formatCurrency(item.minPrice) : "Giá bình dân");
-
-        return `
-          <div class="group food-card glass-panel hover:bg-dark-800/90 rounded-2xl p-4 sm:p-5 border border-white/10 hover:border-brand-500/50 active:scale-[0.99] transition-all duration-200 flex flex-col justify-between cursor-pointer" data-id="${Utils.escapeHTML(item.id)}">
-            <div class="space-y-2.5">
-              <div class="flex items-center justify-between gap-2">
-                <span class="px-2.5 py-0.5 rounded-md bg-white/5 text-slate-300 text-[11px] font-bold">${Utils.escapeHTML(item.group)}</span>
-                <button class="btn-card-fav w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${isFav ? 'text-rose-500 bg-rose-500/10' : 'text-slate-400 hover:text-rose-400'}" data-id="${Utils.escapeHTML(item.id)}">
-                  <i data-lucide="heart" class="w-4 h-4 ${isFav ? 'fill-current' : ''}"></i>
-                </button>
-              </div>
-
-              <h3 class="font-heading font-black text-lg text-white group-hover:text-brand-400 transition-colors line-clamp-1">${Utils.escapeHTML(item.name)}</h3>
-              <p class="text-xs text-slate-400 line-clamp-2 leading-relaxed">${Utils.escapeHTML(item.description || "Hương vị hấp dẫn tuyệt hảo khó cưỡng.")}</p>
-
-              ${venueCount > 0 ? `
-                <div class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
-                  <i data-lucide="map-pin" class="w-3 h-3"></i>
-                  <span>${venueCount} quán quanh đây</span>
-                </div>
-              ` : ''}
-            </div>
-
-            <div class="mt-4 pt-3 border-t border-white/5 flex items-center justify-between">
-              <span class="text-xs font-black text-amber-400">${Utils.escapeHTML(priceText)}</span>
-              <span class="text-[11px] font-bold text-slate-400 group-hover:text-brand-400 flex items-center gap-1">
-                Xem ngay <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
-              </span>
-            </div>
-          </div>
-        `;
+    /* ---- HOME ---- */
+    renderHome() {
+      const t = timeInfo();
+      $("greeting").textContent = t.hello;
+      $("smart-time-text").textContent = `${t.icon} Đang là ${t.label} · bấm để lọc nhanh`;
+      const n = Engine.pool({ recent: true }).length;
+      $("filtered-candidates-counter").textContent = state.foods.length ? `🍽️ ${n} món sẵn sàng` : "Đang tải thực đơn...";
+      this.renderMoodChips();
+    },
+    renderMoodChips() {
+      const f = state.filters, t = timeInfo(), tp = findPurposeFor(t);
+      const none = f.purpose === "all" && f.group === "all" && f.district === "all" && f.budget === "all";
+      const chips = [
+        ["all", "🎲 Tất cả", none], ["time", `${t.icon} ${t.label}`, !!tp && f.purpose === tp],
+        ["cheap", "💸 Dưới 50k", f.budget === "max:50000"], ["treat", "🥂 Chiêu đãi", f.budget === "min:100000"]
+      ];
+      $("mood-chips").innerHTML = chips.map(([id, label, on]) => `<button class="chip ${on ? "on" : ""}" data-mood="${id}">${label}</button>`).join("");
+    },
+    renderTrending() {
+      const wrap = $("trending-wrap");
+      if (!state.trending.length) { wrap.hidden = true; return; }
+      wrap.hidden = false;
+      $("trending-list").innerHTML = state.trending.map(t => {
+        const f = state.byId.get(t.id);
+        return `<button class="chip" data-open="${U.esc(t.id)}">${U.emoji(f)} ${U.esc(f.name)}</button>`;
       }).join("");
-
-      this.dom.foodsGrid.innerHTML = cardsHtml;
-      lucide.createIcons();
     },
 
-    displayRandomResult(food) {
-      if (!food) {
-        showToast("Không tìm thấy món ăn phù hợp với bộ lọc!", "error");
-        return;
+    /* ---- EXPLORE ---- */
+    renderGroupChips() {
+      const g = state.filters.group;
+      $("group-chips").innerHTML = `<button class="chip ${g === "all" ? "on" : ""}" data-group="all">Tất cả</button>` +
+        state.meta.groups.map(x => `<button class="chip ${g === x ? "on" : ""}" data-group="${U.esc(x)}">${U.esc(x)}</button>`).join("");
+    },
+    renderExplore() {
+      if (!state.foods.length) return;
+      const grid = $("foods-grid-container");
+      const list = Engine.exploreList();
+      $("food-count-label").textContent = `${list.length} món ngon`;
+      if (!list.length) {
+        grid.innerHTML = `<div class="empty"><span class="big">🍽️</span>Không có món nào phù hợp.<br>Thử đổi bộ lọc hoặc từ khóa nhé!<br><br><button class="btn-soft" data-act-reset="1">Đặt lại bộ lọc</button></div>`;
+        $("btn-load-more").hidden = true; icons(); return;
       }
+      const shown = list.slice(0, state.exploreLimit);
+      grid.innerHTML = shown.map(i => this.rowHtml(i)).join("");
+      const more = list.length - shown.length;
+      $("btn-load-more").hidden = more <= 0;
+      $("btn-load-more").textContent = `Xem thêm (${more} món)`;
+      icons();
+    },
+    renderFilterBadges() {
+      const f = state.filters;
+      const n = ["purpose", "group", "district", "budget"].filter(k => f[k] !== "all").length;
+      $$(".js-filter-badge").forEach(b => { b.hidden = n === 0; b.textContent = n; });
+    },
 
-      state.currentFood = food;
-      this.dom.resName.textContent = food.name;
-      this.dom.resDesc.textContent = food.description || "Món ăn tuyệt hảo tiếp thêm năng lượng tràn trề cho ngày của bạn.";
+    /* ---- SHEET: FILTER ---- */
+    filterSheet() {
+      const f = state.filters, m = state.meta;
+      const opts = (list, cur) => list.map(([v, t]) => `<option value="${U.esc(v)}" ${cur === v ? "selected" : ""}>${U.esc(t)}</option>`).join("");
+      const arr = (all, items) => [["all", all]].concat(items.map(x => [x, x]));
+      const html = `
+        <label class="field"><span>Bữa ăn</span><select data-filter="purpose">${opts(arr("Tất cả bữa ăn", m.purposes), f.purpose)}</select></label>
+        <label class="field"><span>Nhóm món</span><select data-filter="group">${opts(arr("Tất cả nhóm", m.groups), f.group)}</select></label>
+        <label class="field"><span>Khu vực</span><select data-filter="district">${opts(arr("Tất cả khu vực", m.districts), f.district)}</select></label>
+        <label class="field"><span>Mức giá</span><select data-filter="budget">${opts(BUDGETS, f.budget)}</select></label>
+        <label class="field"><span>Sắp xếp (tab Thực đơn)</span><select data-filter="sort">${opts(SORTS, f.sort)}</select></label>
+        <label class="switch-row"><div><b>Tránh trùng món gần đây</b><small>Không quay lại ${CONFIG.RECENT_EXCLUDE} món vừa chọn</small></div>
+          <input type="checkbox" data-filter="excludeRecent" ${f.excludeRecent ? "checked" : ""}><i class="sw"></i></label>
+        <div class="act-row" style="margin-top:18px">
+          <button class="btn-soft" data-act="filter-reset">Đặt lại</button>
+          <button class="btn-primary grow" data-act="filter-done" id="filter-apply-btn">Xem ${Engine.pool().length} món</button>
+        </div>`;
+      Sheet.show("Bộ lọc thông minh", html, "filter");
+    },
 
-      // Metadata chips
-      let chipsHtml = `<span class="px-2.5 py-1 rounded-lg bg-white/10 text-slate-200 text-xs font-bold">${Utils.escapeHTML(food.group)}</span>`;
-      if (food.purposes) {
-        food.purposes.forEach(p => {
-          chipsHtml += `<span class="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-300 text-xs font-bold">${Utils.escapeHTML(p)}</span>`;
-        });
-      }
-      const priceText = food.minPrice !== null && food.maxPrice !== null
-        ? (food.minPrice === food.maxPrice ? Utils.formatCurrency(food.minPrice) : `${Utils.formatCurrency(food.minPrice)} - ${Utils.formatCurrency(food.maxPrice)}`)
-        : "Giá bình dân";
-      chipsHtml += `<span class="px-2.5 py-1 rounded-lg bg-brand-500 text-white text-xs font-black">${Utils.escapeHTML(priceText)}</span>`;
-      this.dom.resMetaChips.innerHTML = chipsHtml;
-
-      // Cập nhật link đặt đồ ăn tự động (ShopeeFood / GrabFood / Be)
-      const delivery = Utils.getDeliveryLinks(food.name, food.venues?.[0]?.restaurant || "");
-      this.dom.linkShopeeFood.href = delivery.shopeeFood;
-      this.dom.linkGrabFood.href = delivery.grabFood;
-      this.dom.linkBeFood.href = delivery.beFood;
-
-      // Render danh sách quán gợi ý
-      const venues = food.venues || [];
-      this.dom.resVenuesCount.textContent = venues.length;
-
-      if (!venues.length) {
-        this.dom.resVenuesContainer.innerHTML = `<p class="col-span-full text-xs text-slate-400 py-2">Món phổ biến, dễ dàng tìm thấy tại các quán quanh khu vực của bạn.</p>`;
-      } else {
-        this.dom.resVenuesContainer.innerHTML = venues.map(v => `
-          <div class="glass-panel p-3 rounded-xl border border-white/10 hover:border-brand-500/40 transition-all flex items-start justify-between gap-2.5">
-            <div class="space-y-1 overflow-hidden">
-              <div class="font-bold text-xs text-white truncate">${Utils.escapeHTML(v.restaurant)} ${v.district ? `<span class="text-slate-400 font-normal">(${Utils.escapeHTML(v.district)})</span>` : ''}</div>
-              <div class="text-[11px] text-slate-400 leading-snug line-clamp-1">${Utils.escapeHTML(v.address || "Địa chỉ cập nhật trực tiếp tại quán")}</div>
-              ${v.notes ? `<div class="text-[10px] font-semibold text-brand-400 truncate">* ${Utils.escapeHTML(v.notes)}</div>` : ''}
+    /* ---- SHEET: FOOD ---- */
+    foodSheet(food, mode) {
+      state.current = food;
+      const df = state.filters.district;
+      const venues = (food.venues || []).slice().sort((a, b) => (b.district === df ? 1 : 0) - (a.district === df ? 1 : 0));
+      state.venues = venues;
+      const mapsQ = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(food.name)}`;
+      const tags = [`<span class="tag">${U.esc(food.group)}</span>`]
+        .concat((food.purposes || []).map(p => `<span class="tag">${U.esc(p)}</span>`))
+        .concat([`<span class="tag price">${U.esc(U.priceText(food.minPrice, food.maxPrice))}</span>`]).join("");
+      const primary = mode === "result"
+        ? `<button class="btn-primary grow" data-act="reroll"><i data-lucide="refresh-cw"></i>Đổi món khác</button>`
+        : `<button class="btn-primary grow" data-act="choose"><i data-lucide="check"></i>Chốt món này</button>`;
+      const venuesHtml = venues.length ? venues.map((v, i) => {
+        const pt = U.priceText(v.minPrice, v.maxPrice, "");
+        return `
+          <div class="venue" data-vi="${i}">
+            <div>
+              <b>${U.esc(v.restaurant)}</b>${v.district ? `<em>${U.esc(v.district)}</em>` : ""}
+              <p>${U.esc(v.address || "Địa chỉ cập nhật tại quán")}</p>
+              ${v.notes ? `<small>* ${U.esc(v.notes)}</small>` : ""}${pt ? `<small>${U.esc(pt)}</small>` : ""}
             </div>
-            ${v.mapUrl && Utils.isValidUrl(v.mapUrl) ? `
-              <a href="${Utils.escapeHTML(v.mapUrl)}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-brand-500 text-slate-200 hover:text-white text-[11px] font-bold shrink-0 transition-colors flex items-center gap-1" title="Chỉ đường Google Maps">
-                <i data-lucide="map" class="w-3 h-3"></i> Đường đi
-              </a>
-            ` : ''}
-          </div>
-        `).join("");
-      }
+            <div class="venue-act">
+              ${U.isUrl(v.mapUrl) ? `<a class="btn-soft sm" href="${U.esc(v.mapUrl)}" target="_blank" rel="noopener noreferrer"><i data-lucide="navigation"></i>Chỉ đường</a>` : ""}
+              ${v.address ? `<button class="btn-soft sm" data-act="copy-addr" data-vi="${i}"><i data-lucide="copy"></i>Chép</button>` : ""}
+            </div>
+          </div>`;
+      }).join("") : `<div class="empty" style="padding:18px 0">Món phổ biến, dễ tìm quanh bạn. Thử tìm trên bản đồ nhé 👇</div>`;
 
-      // Nút Favorite
-      const isFav = state.favorites.some(f => f.id === food.id);
-      this.updateFavBtn(this.dom.btnToggleFavRes, isFav);
-
-      // Hiển thị Spotlight Card & Cuộn mượt
-      this.dom.randomSection.classList.remove("hidden");
-      this.dom.randomSection.scrollIntoView({ behavior: "smooth", block: "center" });
-
-      this.addToHistory(food);
-      fireConfetti();
-      lucide.createIcons();
+      const html = `
+        <div class="food-hero" style="--g:${U.grad(food)};background:${U.grad(food)}">
+          <div class="food-emoji">${U.emoji(food)}</div>
+          ${mode === "result" ? '<span class="kicker">✨ HÔM NAY ĂN</span>' : ""}
+          <h2 class="food-name">${U.esc(food.name)}</h2>
+        </div>
+        <div class="tags">${tags}</div>
+        <p class="food-desc">${U.esc(food.description || "Hương vị hấp dẫn, đậm bản sắc Việt. Ăn một lần là nhớ mãi!")}</p>
+        <div class="act-row">
+          ${primary}
+          <button class="sq fav ${isFav(food.id) ? "on" : ""}" data-act="fav" aria-label="Lưu món"><i data-lucide="heart"></i></button>
+          <button class="sq bad ${isBlocked(food.id) ? "on" : ""}" data-act="block" aria-label="Không thích món này"><i data-lucide="ban"></i></button>
+          <button class="sq" data-act="share" aria-label="Chia sẻ"><i data-lucide="share-2"></i></button>
+        </div>
+        <div class="sec-row"><h4>📍 Quán gợi ý (${venues.length})</h4>
+          ${venues.length > 1 ? `<button class="btn-soft sm" data-act="venue-random"><i data-lucide="sparkles"></i>Chọn giúp quán</button>` : ""}
+        </div>
+        ${venuesHtml}
+        <a class="btn-soft wide" href="${mapsQ}" target="_blank" rel="noopener noreferrer"><i data-lucide="map-pin"></i>Tìm quán gần tôi trên Maps</a>`;
+      Sheet.show(mode === "result" ? "Gợi ý cho bạn" : "Chi tiết món", html, mode);
     },
 
-    updateFavBtn(btn, isFav) {
-      if (!btn) return;
-      if (isFav) {
-        btn.classList.add("text-rose-500", "border-rose-500/50", "bg-rose-500/10");
-        btn.querySelector("svg")?.classList.add("fill-current");
-      } else {
-        btn.classList.remove("text-rose-500", "border-rose-500/50", "bg-rose-500/10");
-        btn.querySelector("svg")?.classList.remove("fill-current");
-      }
-    },
+    /* ---- ME ---- */
+    renderMe() {
+      const hist = state.history, streak = calcStreak();
+      const counts = {};
+      hist.forEach(h => { counts[h.group] = (counts[h.group] || 0) + 1; });
+      const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      const max = top.length ? top[0][1] : 1;
+      $("me-stats").innerHTML = `
+        <div class="stats">
+          <div class="stat"><b>${streak}🔥</b><span>Ngày liên tiếp</span></div>
+          <div class="stat"><b>${hist.length}</b><span>Lần khui món</span></div>
+          <div class="stat"><b>${state.favorites.length}</b><span>Món đã lưu</span></div>
+        </div>
+        ${top.length ? `<div class="card"><h4>Bạn hay ăn nhất</h4>${top.map(([g, c]) => `<div class="bar"><em>${U.esc(g)}</em><i style="width:${Math.max(8, (c / max) * 100)}%"></i><span>${c}</span></div>`).join("")}</div>` : ""}`;
 
-    updateFavBadge() {
-      const count = state.favorites.length;
-      if (count > 0) {
-        this.dom.favBadge.classList.remove("scale-0");
-        this.dom.favBadge.textContent = count > 99 ? "99+" : count;
-      } else {
-        this.dom.favBadge.classList.add("scale-0");
-      }
-    },
+      $$("#me-seg button").forEach(b => b.classList.toggle("on", b.dataset.tab === state.meTab));
 
-    addToHistory(food) {
-      const item = {
-        id: food.id,
-        name: food.name,
-        group: food.group,
-        venuesCount: food.venues ? food.venues.length : 0,
-        time: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
-        date: new Date().toLocaleDateString("vi-VN")
+      const rowSimple = (it, action, icon, extra = "") => {
+        const f = state.byId.get(it.id) || it;
+        return `<article class="row" data-open="${U.esc(it.id)}">
+          <div class="row-emoji" style="background:${U.grad(f)}">${U.emoji(f)}</div>
+          <div class="row-main"><h4>${U.esc(it.name)}</h4><div class="row-meta"><span>${U.esc(it.group)}</span>${extra}</div></div>
+          ${action ? `<button class="fav-btn" ${action} aria-label="Xóa"><i data-lucide="${icon}"></i></button>` : ""}
+        </article>`;
       };
-      state.history.unshift(item);
-      if (state.history.length > CONFIG.HISTORY_MAX_ITEMS) state.history.pop();
-      Storage.set(CONFIG.STORAGE_KEYS.HISTORY, state.history, "Đã lưu lịch sử");
-    },
-
-    openFoodModal(food) {
-      if (!food) return;
-      this.dom.modalTitle.textContent = food.name;
-
-      const priceText = food.minPrice !== null && food.maxPrice !== null
-        ? (food.minPrice === food.maxPrice ? Utils.formatCurrency(food.minPrice) : `${Utils.formatCurrency(food.minPrice)} - ${Utils.formatCurrency(food.maxPrice)}`)
-        : "Giá bình dân";
-
-      const delivery = Utils.getDeliveryLinks(food.name, food.venues?.[0]?.restaurant || "");
-      const venues = food.venues || [];
-
-      const venuesHtml = venues.length > 0 ? venues.map(v => `
-        <div class="glass-panel p-3 rounded-xl border border-white/10 flex items-start justify-between gap-3">
-          <div class="space-y-1 overflow-hidden">
-            <div class="font-bold text-xs text-white truncate">${Utils.escapeHTML(v.restaurant)} ${v.district ? `<span class="text-slate-400 font-normal">(${Utils.escapeHTML(v.district)})</span>` : ''}</div>
-            <div class="text-[11px] text-slate-400">${Utils.escapeHTML(v.address || "Địa chỉ quán")}</div>
-            ${v.notes ? `<div class="text-[10px] font-semibold text-brand-400">* ${Utils.escapeHTML(v.notes)}</div>` : ''}
-          </div>
-          ${v.mapUrl && Utils.isValidUrl(v.mapUrl) ? `
-            <a href="${Utils.escapeHTML(v.mapUrl)}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-brand-500 text-slate-200 text-[11px] font-bold shrink-0 transition-colors">
-              Chỉ đường
-            </a>
-          ` : ''}
-        </div>
-      `).join("") : '<p class="text-xs text-slate-400">Chưa có thông tin quán cụ thể.</p>';
-
-      this.dom.modalBody.innerHTML = `
-        <div class="flex flex-wrap gap-2">
-          <span class="px-2.5 py-0.5 rounded-md bg-white/10 text-slate-300 text-xs font-bold">${Utils.escapeHTML(food.group)}</span>
-          <span class="px-2.5 py-0.5 rounded-md bg-brand-500/20 text-brand-300 border border-brand-500/30 text-xs font-black">${Utils.escapeHTML(priceText)}</span>
-        </div>
-        <p class="text-slate-300 text-xs sm:text-sm leading-relaxed">${Utils.escapeHTML(food.description || "Hương vị hấp dẫn đặc sắc khó quên.")}</p>
-
-        <!-- Nút đặt giao nhanh trong Modal -->
-        <div class="p-3.5 rounded-2xl bg-dark-950 border border-white/10 space-y-2">
-          <div class="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-            <i data-lucide="bike" class="w-3.5 h-3.5"></i> Đặt giao đồ ăn ngay:
-          </div>
-          <div class="grid grid-cols-3 gap-2">
-            <a href="${delivery.shopeeFood}" target="_blank" rel="noopener noreferrer" class="py-2 px-2 text-center rounded-xl bg-orange-600/20 border border-orange-500/30 text-orange-300 text-xs font-bold active:scale-95">ShopeeFood</a>
-            <a href="${delivery.grabFood}" target="_blank" rel="noopener noreferrer" class="py-2 px-2 text-center rounded-xl bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold active:scale-95">GrabFood</a>
-            <a href="${delivery.beFood}" target="_blank" rel="noopener noreferrer" class="py-2 px-2 text-center rounded-xl bg-yellow-500/20 border border-yellow-400/30 text-yellow-300 text-xs font-bold active:scale-95">Be Food</a>
-          </div>
-        </div>
-
-        <div class="space-y-2.5 pt-2">
-          <div class="font-bold text-xs text-slate-300 uppercase tracking-wider">Địa điểm phục vụ (${venues.length})</div>
-          <div class="space-y-2 max-h-56 overflow-y-auto pr-1">${venuesHtml}</div>
-        </div>
-      `;
-
-      this.dom.modal.classList.add("modal-active");
-      lucide.createIcons();
-    },
-
-    openFavoritesModal() {
-      this.dom.modalTitle.textContent = `Món Đã Lưu (${state.favorites.length})`;
-      if (state.favorites.length === 0) {
-        this.dom.modalBody.innerHTML = `
-          <div class="text-center py-10 px-4">
-            <i data-lucide="heart" class="w-10 h-10 text-slate-600 mx-auto mb-2"></i>
-            <p class="text-xs font-bold text-slate-300">Chưa có món ăn nào trong mục yêu thích</p>
-            <p class="text-[11px] text-slate-500 mt-1">Bấm biểu tượng trái tim để lưu lại bạn nhé!</p>
-          </div>
-        `;
+      let body = "";
+      if (state.meTab === "fav") {
+        body = state.favorites.length
+          ? `<div class="list">${state.favorites.map(f => rowSimple(f, `data-unfav="${U.esc(f.id)}"`, "x")).join("")}</div>`
+          : `<div class="empty"><span class="big">💝</span>Chưa có món nào được lưu.<br>Bấm ❤️ hoặc vuốt phải ở tab Vuốt nhé!</div>`;
+      } else if (state.meTab === "hist") {
+        body = hist.length
+          ? `<div class="list">${hist.map(h => rowSimple(h, "", "", `<span>${new Date(h.ts).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}</span>`)).join("")}</div>
+             <button class="btn-soft wide danger" data-clear-hist="1"><i data-lucide="trash-2"></i>Xóa lịch sử</button>`
+          : `<div class="empty"><span class="big">🕘</span>Chưa có lịch sử.<br>Khui món đầu tiên của bạn đi!</div>`;
       } else {
-        this.dom.modalBody.innerHTML = `
-          <div class="divide-y divide-white/5 max-h-80 overflow-y-auto pr-1">
-            ${state.favorites.map(f => `
-              <div class="py-2.5 flex items-center justify-between gap-3">
-                <div>
-                  <h4 class="font-bold text-xs text-white">${Utils.escapeHTML(f.name)}</h4>
-                  <span class="text-[10px] text-slate-400">${Utils.escapeHTML(f.group)}</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <button class="btn-quick-view px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 text-[11px] font-bold active:scale-95 transition-all" data-id="${Utils.escapeHTML(f.id)}">Xem</button>
-                  <button class="btn-del-fav px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-300 text-[11px] font-bold active:scale-95 transition-all" data-id="${Utils.escapeHTML(f.id)}">Xóa</button>
-                </div>
-              </div>
-            `).join("")}
-          </div>
-        `;
+        body = state.blocked.length
+          ? `<div class="list">${state.blocked.map(f => rowSimple(f, `data-unblock="${U.esc(f.id)}"`, "rotate-ccw")).join("")}</div>`
+          : `<div class="empty"><span class="big">🙌</span>Chưa chặn món nào.<br>Món bị chặn sẽ không bao giờ xuất hiện khi quay.</div>`;
       }
-      this.dom.modal.classList.add("modal-active");
-      lucide.createIcons();
-    },
+      $("me-body").innerHTML = body;
 
-    openHistoryModal() {
-      this.dom.modalTitle.textContent = "Lịch Sử Chọn Món";
-      if (state.history.length === 0) {
-        this.dom.modalBody.innerHTML = `
-          <div class="text-center py-10 px-4">
-            <i data-lucide="history" class="w-10 h-10 text-slate-600 mx-auto mb-2"></i>
-            <p class="text-xs font-bold text-slate-300">Chưa có lịch sử quay món</p>
-            <p class="text-[11px] text-slate-500 mt-1">Hãy nhấn "Mở Hộp Bí Ẩn" để khám phá bữa ăn ngay!</p>
-          </div>
-        `;
-      } else {
-        this.dom.modalBody.innerHTML = `
-          <div class="flex justify-end pb-1">
-            <button id="btn-clear-history" class="text-[11px] font-bold text-rose-400 hover:underline">Xóa tất cả</button>
-          </div>
-          <div class="divide-y divide-white/5 max-h-80 overflow-y-auto pr-1">
-            ${state.history.map(h => `
-              <div class="py-2.5 flex items-center justify-between gap-3">
-                <div>
-                  <h4 class="font-bold text-xs text-white">${Utils.escapeHTML(h.name)}</h4>
-                  <span class="text-[10px] text-slate-400">${Utils.escapeHTML(h.group)} • ${Utils.escapeHTML(h.time)}</span>
-                </div>
-                <button class="btn-quick-view px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 text-[11px] font-bold active:scale-95 transition-all" data-id="${Utils.escapeHTML(h.id)}">Xem lại</button>
-              </div>
-            `).join("")}
-          </div>
-        `;
-      }
-      this.dom.modal.classList.add("modal-active");
-      lucide.createIcons();
-    },
-
-    closeModal() {
-      this.dom.modal.classList.remove("modal-active");
+      const sw = (key, title, sub) => `<label class="switch-row"><div><b>${title}</b><small>${sub}</small></div><input type="checkbox" data-set="${key}" ${state.settings[key] ? "checked" : ""}><i class="sw"></i></label>`;
+      $("me-settings").innerHTML =
+        sw("haptics", "Rung phản hồi", "Rung nhẹ khi khui món, lưu món") +
+        sw("shake", "Lắc để chọn món", "Lắc điện thoại ở tab Chọn món") +
+        sw("favBoost", "Ưu tiên món đã lưu", "Món yêu thích có cơ hội xuất hiện cao hơn") +
+        `<div style="padding:14px 0 6px"><button class="btn-soft wide danger" style="margin:0" data-clear-all="1"><i data-lucide="trash-2"></i>Xóa toàn bộ dữ liệu trên máy</button></div>`;
+      icons();
     }
   };
 
-  // 11. BỘ ĐIỀU KHIỂN TRUNG TÂM (APP CONTROLLER)
+  /* ============================ 12. SWIPE ============================ */
+  const Swipe = {
+    deck: [], idx: 0, dirty: true, drag: null, lock: false,
+    cardHtml(food, pos) {
+      return `
+        <div class="swipe-card pos-${pos}" data-id="${U.esc(food.id)}">
+          <div class="sc-top" style="background:${U.grad(food)}">
+            <div class="sc-emoji">${U.emoji(food)}</div>
+            <span class="lbl lbl-like">LƯU</span><span class="lbl lbl-nope">BỎ QUA</span>
+          </div>
+          <div class="sc-body">
+            <h3>${U.esc(food.name)}</h3>
+            <div class="sc-tags"><span class="tag">${U.esc(food.group)}</span><span class="tag price">${U.esc(U.priceText(food.minPrice, food.maxPrice))}</span>${food.venues && food.venues.length ? `<span class="tag">📍 ${food.venues.length} quán</span>` : ""}</div>
+            <p>${U.esc(food.description || "Hương vị hấp dẫn, đậm bản sắc Việt.")}</p>
+          </div>
+        </div>`;
+    },
+    build() {
+      this.deck = U.shuffle(Engine.pool()).slice(0, 40); this.idx = 0; this.dirty = false; this.render();
+    },
+    render() {
+      const st = $("swipe-stage");
+      if (!state.foods.length) { st.innerHTML = `<div class="empty"><span class="big">⏳</span>Đang tải thực đơn...</div>`; return; }
+      if (this.idx >= this.deck.length) {
+        st.innerHTML = `<div class="empty" style="padding-top:70px"><span class="big">🎉</span>${this.deck.length ? "Bạn đã vuốt hết bộ bài!" : "Không có món nào khớp bộ lọc."}<br><br><button class="btn-primary" id="sw-reshuffle">Xáo bộ bài mới</button></div>`;
+        $("swipe-count").textContent = ""; return;
+      }
+      st.innerHTML = [2, 1, 0].map(p => { const f = this.deck[this.idx + p]; return f ? this.cardHtml(f, p) : ""; }).join("");
+      $("swipe-count").textContent = `${this.idx + 1} / ${this.deck.length}`;
+    },
+    top() { return this.deck[this.idx]; },
+    commit(dir) {
+      if (this.lock || this.idx >= this.deck.length) return;
+      const card = $("swipe-stage").querySelector(".swipe-card.pos-0"); if (!card) return;
+      this.lock = true;
+      const food = this.top();
+      card.style.transition = "transform .28s ease, opacity .28s ease";
+      card.style.transform = `translate(${dir * 130}%, -20px) rotate(${dir * 18}deg)`;
+      card.style.opacity = "0";
+      if (dir > 0) setFav(food, true); else U.buzz(8);
+      setTimeout(() => { this.idx++; this.lock = false; this.render(); }, 260);
+    },
+    bind() {
+      const st = $("swipe-stage");
+      const reset = (d) => {
+        d.c.style.transition = "transform .25s ease"; d.c.style.transform = "";
+        d.c.querySelectorAll(".lbl").forEach(l => (l.style.opacity = 0));
+      };
+      st.addEventListener("pointerdown", (e) => {
+        const c = e.target.closest(".swipe-card.pos-0"); if (!c || this.lock) return;
+        this.drag = { c, x: e.clientX, y: e.clientY, dx: 0, dy: 0, id: e.pointerId };
+        c.style.transition = "none";
+        try { c.setPointerCapture(e.pointerId); } catch (_) {}
+      });
+      st.addEventListener("pointermove", (e) => {
+        const d = this.drag; if (!d || e.pointerId !== d.id) return;
+        d.dx = e.clientX - d.x; d.dy = e.clientY - d.y;
+        d.c.style.transform = `translate(${d.dx}px,${d.dy * 0.4}px) rotate(${d.dx / 18}deg)`;
+        const p = Math.min(1, Math.abs(d.dx) / 110);
+        d.c.querySelector(".lbl-like").style.opacity = d.dx > 0 ? p : 0;
+        d.c.querySelector(".lbl-nope").style.opacity = d.dx < 0 ? p : 0;
+      });
+      const end = () => {
+        const d = this.drag; if (!d) return; this.drag = null;
+        if (Math.abs(d.dx) > 110) this.commit(d.dx > 0 ? 1 : -1);
+        else if (Math.abs(d.dx) < 6 && Math.abs(d.dy) < 6) { reset(d); const f = this.top(); if (f) UI.foodSheet(f, "detail"); }
+        else reset(d);
+      };
+      st.addEventListener("pointerup", end);
+      st.addEventListener("pointercancel", end);
+      st.addEventListener("click", (e) => { if (e.target.closest("#sw-reshuffle")) this.build(); });
+      $("sw-skip").addEventListener("click", () => this.commit(-1));
+      $("sw-like").addEventListener("click", () => this.commit(1));
+      $("sw-info").addEventListener("click", () => { const f = this.top(); if (f) UI.foodSheet(f, "detail"); });
+    }
+  };
+
+  /* ============================ 13. THỰC ĐƠN TUẦN ============================ */
+  const Plan = {
+    load() {
+      const p = Store.get(CONFIG.KEYS.PLAN, null), wk = U.dateKey(U.monday());
+      state.plan = p && p.week === wk && p.slots ? p : { week: wk, slots: {} };
+    },
+    save() { Store.set(CONFIG.KEYS.PLAN, state.plan); },
+    pool(meal, used) {
+      const base = state.foods.filter(i => !isBlocked(i.id) && Engine.matches(i, { purpose: false }));
+      const byMeal = base.filter(i => (i.purposes || []).some(p => meal.kw.some(k => U.norm(p).includes(k))));
+      const list = byMeal.length ? byMeal : (base.length ? base : state.foods.filter(i => !isBlocked(i.id)));
+      const fresh = list.filter(i => !used.has(i.id));
+      return fresh.length ? fresh : list;
+    },
+    usedIds(except) {
+      const s = new Set();
+      Object.keys(state.plan.slots).forEach(k => { if (k !== except && state.plan.slots[k]) s.add(state.plan.slots[k].id); });
+      return s;
+    },
+    generate() {
+      if (!state.foods.length) { toast("Thực đơn đang tải, đợi xíu nhé!"); return; }
+      const slots = state.plan.slots, used = new Set();
+      Object.keys(slots).forEach(k => { if (slots[k] && slots[k].locked) used.add(slots[k].id); });
+      for (let d = 0; d < 7; d++) MEALS.forEach(m => {
+        const key = d + "-" + m.k;
+        if (slots[key] && slots[key].locked) return;
+        const f = Engine.pick(this.pool(m, used));
+        if (f) { slots[key] = { id: f.id, locked: false }; used.add(f.id); }
+      });
+      this.save(); this.render(); U.buzz(20); toast("Đã lên thực đơn cho cả tuần! 🎉", "success");
+    },
+    reroll(d, mk) {
+      const key = d + "-" + mk, slot = state.plan.slots[key], meal = MEALS.find(m => m.k === mk);
+      if (slot && slot.locked) { toast("Món đang được khóa 🔒"); return; }
+      const f = Engine.pick(this.pool(meal, this.usedIds(key)));
+      if (!f) { toast("Không có món phù hợp", "error"); return; }
+      state.plan.slots[key] = { id: f.id, locked: false }; this.save(); this.render(); U.buzz(10);
+    },
+    toggleLock(d, mk) {
+      const key = d + "-" + mk, slot = state.plan.slots[key];
+      if (!slot) return;
+      slot.locked = !slot.locked; this.save(); this.render();
+    },
+    text() {
+      const mon = U.monday();
+      return "🍽️ Thực đơn tuần này\n" + DAYS.map((name, d) => {
+        const dt = new Date(mon); dt.setDate(mon.getDate() + d);
+        const parts = MEALS.map(m => { const s = state.plan.slots[d + "-" + m.k]; const f = s && state.byId.get(s.id); return f ? `${m.icon} ${f.name}` : null; }).filter(Boolean);
+        return parts.length ? `${name} (${dt.getDate()}/${dt.getMonth() + 1}): ${parts.join(" · ")}` : null;
+      }).filter(Boolean).join("\n");
+    },
+    render() {
+      const mon = U.monday(), today = (new Date().getDay() + 6) % 7;
+      $("plan-list").innerHTML = DAYS.map((name, d) => {
+        const dt = new Date(mon); dt.setDate(mon.getDate() + d);
+        const rows = MEALS.map(m => {
+          const key = d + "-" + m.k, s = state.plan.slots[key], f = s && state.byId.get(s.id);
+          return `<div class="slot">
+            <div class="slot-ico"><span>${m.icon}</span>${m.label}</div>
+            ${f ? `<button class="slot-main" data-pa="open" data-id="${U.esc(f.id)}">${U.emoji(f)} ${U.esc(f.name)}</button>`
+                : `<button class="slot-main empty-slot" data-pa="reroll" data-d="${d}" data-m="${m.k}">＋ Chọn món</button>`}
+            ${f ? `<button class="mini ${s.locked ? "on" : ""}" data-pa="lock" data-d="${d}" data-m="${m.k}" aria-label="Khóa"><i data-lucide="lock"></i></button>
+                   <button class="mini" data-pa="reroll" data-d="${d}" data-m="${m.k}" aria-label="Đổi món"><i data-lucide="refresh-cw"></i></button>` : ""}
+          </div>`;
+        }).join("");
+        return `<div class="plan-day ${d === today ? "today" : ""}"><h4>${name}${d === today ? " · Hôm nay" : ""}<small>${dt.getDate()}/${dt.getMonth() + 1}</small></h4>${rows}</div>`;
+      }).join("");
+      icons();
+    },
+    bind() {
+      $("btn-plan-gen").addEventListener("click", () => this.generate());
+      $("btn-plan-clear").addEventListener("click", () => {
+        if (!Object.keys(state.plan.slots).length) return;
+        if (!confirm("Xóa toàn bộ thực đơn tuần này?")) return;
+        state.plan.slots = {}; this.save(); this.render();
+      });
+      $("btn-plan-share").addEventListener("click", async () => {
+        if (!Object.keys(state.plan.slots).length) { toast("Hãy tạo thực đơn trước nhé!"); return; }
+        const text = this.text();
+        if (navigator.share) { try { await navigator.share({ title: "Thực đơn tuần này", text }); } catch (_) {} }
+        else { try { await navigator.clipboard.writeText(text); toast("Đã sao chép thực đơn tuần", "success"); } catch (_) { toast("Không thể sao chép", "error"); } }
+      });
+      $("plan-list").addEventListener("click", (e) => {
+        const b = e.target.closest("[data-pa]"); if (!b) return;
+        const a = b.dataset.pa;
+        if (a === "open") { const f = state.byId.get(b.dataset.id); if (f) UI.foodSheet(f, "detail"); }
+        else if (a === "reroll") this.reroll(Number(b.dataset.d), b.dataset.m);
+        else if (a === "lock") this.toggleLock(Number(b.dataset.d), b.dataset.m);
+      });
+    }
+  };
+
+  /* ============================ 14. APP ============================ */
+  function applyTheme() {
+    document.documentElement.setAttribute("data-theme", state.settings.theme);
+    const meta = $("meta-theme"); if (meta) meta.setAttribute("content", state.settings.theme === "dark" ? "#0d0912" : "#fff7f1");
+    $("btn-theme").innerHTML = `<i data-lucide="${state.settings.theme === "dark" ? "sun" : "moon"}"></i>`;
+    icons();
+  }
+
+  function switchView(name) {
+    state.view = name;
+    $$(".view").forEach(v => v.classList.toggle("active", v.id === "view-" + name));
+    $$(".tab").forEach(t => t.classList.toggle("on", t.dataset.view === name));
+    window.scrollTo({ top: 0 });
+    if (name === "swipe" && (Swipe.dirty || !Swipe.deck.length)) Swipe.build();
+    if (name === "explore") UI.renderExplore();
+    if (name === "plan") Plan.render();
+    if (name === "me") UI.renderMe();
+    if (name === "home") UI.renderHome();
+    icons();
+  }
+
+  function onFiltersChanged(silentSheet) {
+    Store.set(CONFIG.KEYS.FILTERS, state.filters);
+    Swipe.dirty = true; state.exploreLimit = CONFIG.EXPLORE_PAGE;
+    UI.renderHome(); UI.renderGroupChips(); UI.renderFilterBadges();
+    if (state.view === "explore") UI.renderExplore();
+    if (state.view === "swipe") Swipe.build();
+    if (state.view === "me") UI.renderMe();
+    const btn = $("filter-apply-btn"); if (btn) btn.textContent = `Xem ${Engine.pool().length} món`;
+  }
+
   const App = {
     async init() {
-      UI.initElements();
-      UI.renderSkeleton();
-
-      state.favorites = Storage.get(CONFIG.STORAGE_KEYS.FAVORITES, []);
-      state.history = Storage.get(CONFIG.STORAGE_KEYS.HISTORY, []);
-      state.userLocation = Storage.get(CONFIG.STORAGE_KEYS.USER_LOCATION, null);
-      UI.updateFavBadge();
-
-      this.startLiveClockAndMeal();
-      this.initLocationFromStorage();
-      ThreeMysteryStage.init();
-      this.bindEvents();
-      this.initShakeSensor();
-
-      await this.loadData();
+      state.favorites = Store.get(CONFIG.KEYS.FAV, []);
+      state.history = Store.get(CONFIG.KEYS.HIST, []);
+      state.blocked = Store.get(CONFIG.KEYS.BLOCK, []);
+      Object.assign(state.filters, Store.get(CONFIG.KEYS.FILTERS, {}));
+      Object.assign(state.settings, Store.get(CONFIG.KEYS.SETTINGS, {}));
+      Plan.load();
+      applyTheme();
+      UI.renderHome(); UI.renderSkeleton(); UI.renderFilterBadges();
+      Stage.init(); Swipe.bind(); Plan.bind(); this.bindEvents();
+      if (state.settings.shake && typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission !== "function") Shake.enable();
+      icons();
+      await this.load(false);
     },
 
-    // 11.1 Đồng hồ thời gian thực & Phân tích bữa ăn
-    startLiveClockAndMeal() {
-      const updateClock = () => {
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-        if (UI.dom.liveClock) UI.dom.liveClock.textContent = timeStr;
-
-        const h = now.getHours();
-        let mealLabel = "Bữa chính";
-        if (h >= 5 && h < 10) mealLabel = "Bữa sáng";
-        else if (h >= 10 && h < 14) mealLabel = "Bữa trưa";
-        else if (h >= 14 && h < 17) mealLabel = "Ăn vặt / Xế chiều";
-        else if (h >= 17 && h < 22) mealLabel = "Bữa tối";
-        else mealLabel = "Ăn đêm";
-
-        if (UI.dom.smartTimeText) UI.dom.smartTimeText.textContent = `Giờ chuẩn: ${mealLabel}`;
-        if (UI.dom.smartTimePill) UI.dom.smartTimePill.setAttribute("data-purpose", mealLabel);
-      };
-
-      updateClock();
-      setInterval(updateClock, 1000);
+    setFoods(foods) {
+      state.foods = foods; state.byId = new Map(foods.map(f => [f.id, f]));
+      const g = new Set(), p = new Set(), d = new Set();
+      foods.forEach(f => { if (f.group) g.add(f.group); (f.purposes || []).forEach(x => p.add(x)); (f.districts || []).forEach(x => d.add(x)); });
+      state.meta = { groups: [...g].sort((a, b) => a.localeCompare(b, "vi")), purposes: [...p].sort(), districts: [...d].sort((a, b) => a.localeCompare(b, "vi")) };
+      const f = state.filters;
+      if (f.purpose !== "all" && !p.has(f.purpose)) f.purpose = "all";
+      if (f.group !== "all" && !g.has(f.group)) f.group = "all";
+      if (f.district !== "all" && !d.has(f.district)) f.district = "all";
+      Swipe.dirty = true;
+      UI.renderHome(); UI.renderGroupChips(); UI.renderExplore(); UI.renderFilterBadges(); UI.renderTrending();
+      if (state.view === "plan") Plan.render();
+      if (state.view === "me") UI.renderMe();
+      icons();
     },
 
-    // 11.2 Định vị GPS Geolocation trên điện thoại
-    initLocationFromStorage() {
-      if (state.userLocation && state.userLocation.addressName) {
-        UI.dom.gpsLocationText.textContent = state.userLocation.addressName;
+    async load(force) {
+      const cached = Store.get(CONFIG.KEYS.CACHE, null);
+      let usedCache = false;
+      if (!force && cached && cached.foods && cached.foods.length) {
+        this.setFoods(cached.foods); usedCache = true;
+        if (Date.now() - cached.ts < CONFIG.CACHE_MAX_AGE_MS) { this.loadTrending(); return; }
+      } else UI.renderSkeleton();
+
+      try {
+        const foods = await Api.fetchAll(force);
+        this.setFoods(foods);
+        Store.set(CONFIG.KEYS.CACHE, { ts: Date.now(), foods });
+        if (force) toast("Đã cập nhật thực đơn mới nhất!", "success");
+        this.loadTrending();
+      } catch (err) {
+        if (usedCache) { toast("Đang dùng dữ liệu đã lưu trên máy"); return; }
+        $("foods-grid-container").innerHTML = `<div class="empty"><span class="big">😵</span>Không thể tải thực đơn<br><small>${U.esc(err.message)}</small><br><br><button class="btn-primary" id="btn-retry">Thử lại</button></div>`;
+        $("food-count-label").textContent = "Lỗi kết nối";
+        $("filtered-candidates-counter").textContent = "Chưa có dữ liệu";
       }
     },
 
-    async requestUserLocation() {
-      if (!("geolocation" in navigator)) {
-        showToast("Thiết bị không hỗ trợ định vị GPS", "error");
-        return;
-      }
+    loadTrending() {
+      Api.getTrending().then(res => {
+        state.trending = (res.data || []).filter(t => state.byId.has(t.id)).slice(0, 8);
+        UI.renderTrending();
+      }).catch(() => {});
+    },
 
-      UI.dom.gpsLocationText.textContent = "Đang quét vệ tinh GPS...";
-      Utils.vibrate(30);
-
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const lat = position.coords.latitude;
-          const lng = position.coords.longitude;
-
-          try {
-            // Reverse Geocoding qua OpenStreetMap Nominatim
-            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`, {
-              headers: { "Accept-Language": "vi" }
-            });
-            const data = await res.json();
-
-            const addr = data.address || {};
-            const district = addr.city_district || addr.district || addr.suburb || addr.quarter || addr.town || addr.city || "Gần bạn";
-            const city = addr.city || addr.state || "";
-            const displayLoc = `${district}${city ? ', ' + city : ''}`;
-
-            state.userLocation = { lat, lng, district, addressName: displayLoc };
-            Storage.set(CONFIG.STORAGE_KEYS.USER_LOCATION, state.userLocation, "Đã lưu vị trí GPS");
-
-            UI.dom.gpsLocationText.textContent = displayLoc;
-            showToast(`Đã định vị: ${displayLoc}`, "success");
-            Utils.vibrate([40, 40]);
-
-            // Tự động gắn bộ lọc khu vực nếu tên quận khớp với dữ liệu
-            this.autoMatchDistrictFilter(district);
-
-          } catch (err) {
-            UI.dom.gpsLocationText.textContent = `Vị trí: ${lat.toFixed(2)}, ${lng.toFixed(2)}`;
-            showToast("Đã lấy tọa độ GPS thành công!", "info");
-          }
-        },
-        (error) => {
-          UI.dom.gpsLocationText.textContent = "Bấm để cấp quyền vị trí";
-          showToast("Vui lòng bật quyền truy cập vị trí trên điện thoại", "error");
-        },
-        { timeout: 10000, enableHighAccuracy: true }
+    spin() {
+      if (state.busy) return;
+      if (!state.foods.length) { toast("Thực đơn đang tải, đợi xíu nhé!"); return; }
+      if (state.view !== "home") { switchView("home"); setTimeout(() => App.spin(), 350); return; }
+      const picked = Engine.pick(Engine.pool({ recent: true }));
+      if (!picked) { toast("Không có món nào khớp bộ lọc 😢", "error"); return; }
+      state.busy = true; U.buzz(25); Shake.enable();
+      $("btn-hero-spin").disabled = true;
+      $("spin-btn-label").textContent = "Đang trộn nguyên liệu...";
+      Stage.caption("🔥 Đang nấu...");
+      Stage.tint(U.hue(picked));
+      Stage.play(
+        () => App.reveal(picked),
+        () => {
+          state.busy = false;
+          $("btn-hero-spin").disabled = false;
+          $("spin-btn-label").textContent = "Khui món ngẫu nhiên";
+          Stage.caption("Chạm vào tô để khui món");
+        }
       );
     },
 
-    autoMatchDistrictFilter(districtName) {
-      if (!districtName || !UI.dom.filterDistrict) return;
-      const normUser = Utils.normalizeVietnamese(districtName);
-      const options = Array.from(UI.dom.filterDistrict.options);
-      
-      const matched = options.find(opt => {
-        const normOpt = Utils.normalizeVietnamese(opt.value);
-        return normOpt !== "all" && (normUser.includes(normOpt) || normOpt.includes(normUser));
-      });
-
-      if (matched) {
-        UI.dom.filterDistrict.value = matched.value;
-        state.activeFilters.district = matched.value;
-        this.applyFilters();
-        showToast(`Đã ưu tiên quán tại khu vực ${matched.value}`, "success");
-      }
-    },
-
-    // 11.3 Cảm biến Lắc Điện Thoại (Shake to Pick)
-    initShakeSensor() {
-      if (typeof window.DeviceMotionEvent !== "undefined") {
-        let lastX = null, lastY = null, lastZ = null;
-
-        window.addEventListener("devicemotion", (e) => {
-          const acc = e.accelerationIncludingGravity;
-          if (!acc || acc.x === null) return;
-
-          if (lastX === null) {
-            lastX = acc.x;
-            lastY = acc.y;
-            lastZ = acc.z;
-            return;
-          }
-
-          const deltaX = Math.abs(acc.x - lastX);
-          const deltaY = Math.abs(acc.y - lastY);
-          const deltaZ = Math.abs(acc.z - lastZ);
-
-          lastX = acc.x;
-          lastY = acc.y;
-          lastZ = acc.z;
-
-          const speed = deltaX + deltaY + deltaZ;
-          const now = Date.now();
-
-          if (speed > CONFIG.SHAKE_THRESHOLD && (now - state.lastShakeTime > 2500)) {
-            state.lastShakeTime = now;
-            Utils.vibrate([50, 50, 100]);
-            this.triggerRandomSpin();
-          }
-        }, false);
-      }
-    },
-
-    async loadData(forceRefresh = false) {
-      try {
-        state.isLoading = true;
-        const res = await ApiClient.getFoods(forceRefresh);
-        state.foods = res.data || [];
-        state.filteredFoods = state.foods.slice();
-
-        this.extractFiltersMeta(state.foods);
-        UI.populateFilterOptions();
-        UI.renderFoodsList(state.filteredFoods);
-        this.updateCandidatesCounter();
-
-        if (forceRefresh) {
-          showToast("Đã đồng bộ thực đơn mới từ Google Sheets!", "success");
-        }
-      } catch (err) {
-        UI.dom.foodsGrid.innerHTML = `
-          <div class="col-span-full text-center py-12 px-4 glass-panel rounded-2xl border border-rose-500/30">
-            <h3 class="text-sm font-bold text-rose-400 mb-1">Không thể kết nối máy chủ dữ liệu</h3>
-            <p class="text-xs text-slate-400 mb-3">${Utils.escapeHTML(err.message)}</p>
-            <button onclick="location.reload()" class="px-5 py-2 rounded-xl bg-brand-600 text-white font-bold text-xs">Thử lại</button>
-          </div>
-        `;
-      } finally {
-        state.isLoading = false;
-      }
-    },
-
-    extractFiltersMeta(foods) {
-      const gSet = new Set();
-      const pSet = new Set();
-      const dSet = new Set();
-
-      foods.forEach(f => {
-        if (f.group) gSet.add(f.group);
-        if (f.purposes) f.purposes.forEach(p => pSet.add(p));
-        if (f.districts) f.districts.forEach(d => dSet.add(d));
-      });
-
-      state.filtersMeta.groups = Array.from(gSet).sort();
-      state.filtersMeta.purposes = Array.from(pSet).sort();
-      state.filtersMeta.districts = Array.from(dSet).sort();
-    },
-
-    updateCandidatesCounter() {
-      const eligible = FoodEngine.getCandidates();
-      UI.dom.candidatesCounter.textContent = `${eligible.length} món sẵn sàng`;
-    },
-
-    triggerRandomSpin() {
-      if (state.isSpinning || state.foods.length === 0) return;
-      state.isSpinning = true;
-
-      UI.dom.btnHeroSpin.disabled = true;
-      UI.dom.spinBtnLabel.textContent = "ĐANG KHUI HỘP...";
-
-      ThreeMysteryStage.triggerOpen(() => {
-        const picked = FoodEngine.spin();
-        UI.dom.btnHeroSpin.disabled = false;
-        UI.dom.spinBtnLabel.textContent = "MỞ HỘP BÍ ẨN ẨM THỰC";
-        state.isSpinning = false;
-
-        if (picked) {
-          UI.displayRandomResult(picked);
-          showToast(`Lựa chọn định mệnh: ${picked.name}!`, "success");
-        } else {
-          showToast("Không có món ăn nào khớp với bộ lọc!", "error");
-        }
-      });
+    reveal(food) {
+      addHistory(food);
+      celebrate(U.emoji(food));
+      U.buzz([30, 40, 60]);
+      UI.foodSheet(food, "result");
+      UI.renderHome();
     },
 
     bindEvents() {
-      // 1. Khui Hộp Bí Ẩn
-      UI.dom.btnHeroSpin.addEventListener("click", () => this.triggerRandomSpin());
-      UI.dom.btnSpinAgain.addEventListener("click", () => this.triggerRandomSpin());
-
-      // Phím Space
+      $("btn-hero-spin").addEventListener("click", () => App.spin());
       window.addEventListener("keydown", (e) => {
-        if (e.code === "Space" && e.target === document.body && !UI.dom.modal.classList.contains("modal-active")) {
-          e.preventDefault();
-          this.triggerRandomSpin();
+        if (e.code === "Space" && (e.target === document.body) && !Sheet.open && state.view === "home") { e.preventDefault(); App.spin(); }
+        if (e.key === "Escape" && Sheet.open) Sheet.close();
+      });
+
+      $("tabbar").addEventListener("click", (e) => { const t = e.target.closest(".tab"); if (t) switchView(t.dataset.view); });
+      $("btn-theme").addEventListener("click", () => {
+        state.settings.theme = state.settings.theme === "dark" ? "light" : "dark";
+        Store.set(CONFIG.KEYS.SETTINGS, state.settings); applyTheme();
+      });
+      $("btn-force-refresh").addEventListener("click", () => this.load(true));
+
+      // Mở bộ lọc
+      $$(".js-open-filter").forEach(b => b.addEventListener("click", () => UI.filterSheet()));
+
+      // Sheet
+      $("sheet-close").addEventListener("click", () => Sheet.close());
+      $("sheet-backdrop").addEventListener("click", () => Sheet.close());
+
+      // Mood chips + pill + trending
+      $("mood-chips").addEventListener("click", (e) => { const c = e.target.closest("[data-mood]"); if (c) this.applyMood(c.dataset.mood); });
+      $("smart-time-pill").addEventListener("click", () => this.applyMood("time"));
+      $("trending-list").addEventListener("click", (e) => { const c = e.target.closest("[data-open]"); if (c) { const f = state.byId.get(c.dataset.open); if (f) UI.foodSheet(f, "detail"); } });
+
+      // Explore
+      let st = null;
+      $("search-box").addEventListener("input", (e) => {
+        clearTimeout(st);
+        st = setTimeout(() => { state.keyword = e.target.value; state.exploreLimit = CONFIG.EXPLORE_PAGE; UI.renderExplore(); }, 220);
+      });
+      $("group-chips").addEventListener("click", (e) => {
+        const c = e.target.closest("[data-group]"); if (!c) return;
+        state.filters.group = c.dataset.group; onFiltersChanged();
+      });
+      $("btn-load-more").addEventListener("click", () => { state.exploreLimit += CONFIG.EXPLORE_PAGE; UI.renderExplore(); });
+      $("foods-grid-container").addEventListener("click", (e) => {
+        if (e.target.closest("#btn-retry")) { this.load(true); return; }
+        if (e.target.closest("[data-act-reset]")) { this.resetFilters(); state.keyword = ""; $("search-box").value = ""; return; }
+        const fb = e.target.closest("[data-fav]");
+        if (fb) { e.stopPropagation(); const f = state.byId.get(fb.dataset.fav); if (f) setFav(f, !isFav(f.id)); return; }
+        const row = e.target.closest("[data-open]");
+        if (row) { const f = state.byId.get(row.dataset.open); if (f) UI.foodSheet(f, "detail"); }
+      });
+
+      // Me
+      $("me-seg").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (b) { state.meTab = b.dataset.tab; UI.renderMe(); } });
+      $("view-me").addEventListener("click", (e) => {
+        const un = e.target.closest("[data-unfav]");
+        if (un) { e.stopPropagation(); const id = un.dataset.unfav; const f = state.byId.get(id) || state.favorites.find(x => x.id === id); if (f) setFav(f, false); return; }
+        const ub = e.target.closest("[data-unblock]");
+        if (ub) { e.stopPropagation(); const f = state.blocked.find(x => x.id === ub.dataset.unblock); if (f) { setBlock(f, false); toast(`Đã bỏ chặn "${f.name}"`); UI.renderMe(); } return; }
+        if (e.target.closest("[data-clear-hist]")) { state.history = []; Store.set(CONFIG.KEYS.HIST, []); UI.renderMe(); toast("Đã xóa lịch sử"); return; }
+        if (e.target.closest("[data-clear-all]")) {
+          if (!confirm("Xóa toàn bộ món đã lưu, lịch sử, món đã chặn và thực đơn tuần?")) return;
+          Object.values(CONFIG.KEYS).forEach(k => { try { localStorage.removeItem(k); } catch (_) {} });
+          state.favorites = []; state.history = []; state.blocked = []; state.plan = { week: U.dateKey(U.monday()), slots: {} };
+          this.resetFilters(); UI.renderMe(); toast("Đã xóa dữ liệu trên máy", "success"); return;
         }
+        const row = e.target.closest("[data-open]");
+        if (row) { const f = state.byId.get(row.dataset.open); if (f) UI.foodSheet(f, "detail"); else toast("Món này không còn trong thực đơn"); }
+      });
+      $("view-me").addEventListener("change", (e) => {
+        const s = e.target.closest("[data-set]"); if (!s) return;
+        state.settings[s.dataset.set] = s.checked; Store.set(CONFIG.KEYS.SETTINGS, state.settings);
+        if (s.dataset.set === "shake" && s.checked) Shake.enable();
       });
 
-      // 2. Định vị GPS
-      UI.dom.btnRequestGps.addEventListener("click", () => this.requestUserLocation());
-
-      // 3. Smart time pill click
-      UI.dom.smartTimePill.addEventListener("click", () => {
-        const target = UI.dom.smartTimePill.getAttribute("data-purpose");
-        const options = Array.from(UI.dom.filterPurpose.options).map(o => o.value);
-        const matched = options.find(opt => opt.toLowerCase().includes(target.toLowerCase()));
-        if (matched) {
-          UI.dom.filterPurpose.value = matched;
-          state.activeFilters.purpose = matched;
-          this.applyFilters();
-          showToast(`Đã lọc theo khung giờ: ${matched}`, "info");
-        }
+      // Sheet body: bộ lọc + hành động món
+      $("sheet-body").addEventListener("change", (e) => {
+        const el = e.target.closest("[data-filter]"); if (!el) return;
+        state.filters[el.dataset.filter] = el.type === "checkbox" ? el.checked : el.value;
+        onFiltersChanged();
       });
-
-      // 4. Lắng nghe thay đổi bộ lọc
-      const onFilterChange = () => {
-        state.activeFilters.purpose = UI.dom.filterPurpose.value;
-        state.activeFilters.group = UI.dom.filterGroup.value;
-        state.activeFilters.district = UI.dom.filterDistrict.value;
-        state.activeFilters.maxBudget = UI.dom.filterBudget.value;
-        state.activeFilters.excludeRecent = UI.dom.chkExcludeRecent.checked;
-        this.applyFilters();
-        Utils.vibrate(20);
-      };
-
-      UI.dom.filterPurpose.addEventListener("change", onFilterChange);
-      UI.dom.filterGroup.addEventListener("change", onFilterChange);
-      UI.dom.filterDistrict.addEventListener("change", onFilterChange);
-      UI.dom.filterBudget.addEventListener("change", onFilterChange);
-      UI.dom.chkExcludeRecent.addEventListener("change", onFilterChange);
-
-      // Đặt lại bộ lọc
-      UI.dom.btnResetFilters.addEventListener("click", () => {
-        UI.dom.filterPurpose.value = "all";
-        UI.dom.filterGroup.value = "all";
-        UI.dom.filterDistrict.value = "all";
-        UI.dom.filterBudget.value = "all";
-        UI.dom.searchBox.value = "";
-        UI.dom.chkExcludeRecent.checked = true;
-        state.activeFilters = {
-          purpose: "all",
-          group: "all",
-          district: "all",
-          maxBudget: "all",
-          keyword: "",
-          excludeRecent: true
-        };
-        this.applyFilters();
-        showToast("Đã đưa bộ lọc về mặc định", "info");
-      });
-
-      // Ô tìm kiếm Debounce
-      let searchTimeout = null;
-      UI.dom.searchBox.addEventListener("input", (e) => {
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(() => {
-          state.activeFilters.keyword = e.target.value;
-          this.applyFilters();
-        }, 200);
-      });
-
-      // Scroll menu
-      UI.dom.btnScrollMenu.addEventListener("click", () => {
-        document.getElementById("explore-view").scrollIntoView({ behavior: "smooth" });
-      });
-
-      // Favorite toggle từ Spotlight
-      UI.dom.btnToggleFavRes.addEventListener("click", () => {
-        if (!state.currentFood) return;
-        this.toggleFavorite(state.currentFood);
-        const isFav = state.favorites.some(f => f.id === state.currentFood.id);
-        UI.updateFavBtn(UI.dom.btnToggleFavRes, isFav);
-      });
-
-      // Chia sẻ
-      UI.dom.btnShareRes.addEventListener("click", async () => {
-        if (!state.currentFood) return;
-        const f = state.currentFood;
-        const shareData = {
-          title: `Hôm nay ăn món ${f.name}!`,
-          text: `Gợi ý chuẩn vị hôm nay: ${f.name} - ${f.description || ''}`,
-          url: window.location.href
-        };
-        if (navigator.share) {
-          try { await navigator.share(shareData); } catch (_) {}
-        } else {
-          try {
-            await navigator.clipboard.writeText(`${shareData.title}\n${shareData.text}`);
-            showToast("Đã chép nội dung vào Clipboard!", "success");
-          } catch (e) {
-            showToast("Không thể tự động sao chép", "error");
+      $("sheet-body").addEventListener("click", (e) => {
+        const el = e.target.closest("[data-act]"); if (!el) return;
+        const act = el.dataset.act, food = state.current;
+        switch (act) {
+          case "filter-reset": this.resetFilters(); UI.filterSheet(); break;
+          case "filter-done": Sheet.close(); break;
+          case "reroll": Sheet.close(); setTimeout(() => App.spin(), 320); break;
+          case "choose":
+            if (food) { addHistory(food); celebrate(U.emoji(food)); U.buzz([20, 30, 40]); toast(`Chốt rồi: ${food.name}! Ăn ngon nhé 😋`, "success"); Sheet.close(); UI.renderHome(); }
+            break;
+          case "fav": if (food) setFav(food, !isFav(food.id)); break;
+          case "block":
+            if (!food) break;
+            if (isBlocked(food.id)) { setBlock(food, false); el.classList.remove("on"); toast(`Đã bỏ chặn "${food.name}"`); }
+            else {
+              setBlock(food, true); el.classList.add("on"); toast(`Sẽ không gợi ý "${food.name}" nữa`);
+              if (Sheet.mode === "result") { Sheet.close(); setTimeout(() => App.spin(), 320); }
+            }
+            break;
+          case "share": if (food) shareFood(food); break;
+          case "venue-random": {
+            const els = $$(".venue", $("sheet-body")); if (!els.length) break;
+            els.forEach(v => v.classList.remove("hl"));
+            const pick = els[Math.floor(Math.random() * els.length)];
+            pick.classList.add("hl"); pick.scrollIntoView({ behavior: "smooth", block: "center" }); U.buzz(20);
+            break;
+          }
+          case "copy-addr": {
+            const v = state.venues[Number(el.dataset.vi)];
+            if (v) { navigator.clipboard.writeText(`${v.restaurant} - ${v.address}`).then(() => toast("Đã chép địa chỉ", "success")).catch(() => toast("Không thể sao chép", "error")); }
+            break;
           }
         }
       });
-
-      // Thao tác trên Cards
-      UI.dom.foodsGrid.addEventListener("click", (e) => {
-        const favBtn = e.target.closest(".btn-card-fav");
-        if (favBtn) {
-          e.stopPropagation();
-          const id = favBtn.getAttribute("data-id");
-          const food = state.foods.find(item => item.id === id);
-          if (food) {
-            this.toggleFavorite(food);
-            const isFav = state.favorites.some(f => f.id === food.id);
-            favBtn.className = `btn-card-fav w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${isFav ? 'text-rose-500 bg-rose-500/10' : 'text-slate-400 hover:text-rose-400'}`;
-            favBtn.innerHTML = `<i data-lucide="heart" class="w-4 h-4 ${isFav ? 'fill-current' : ''}"></i>`;
-            lucide.createIcons();
-          }
-          return;
-        }
-
-        const card = e.target.closest(".food-card");
-        if (card) {
-          const id = card.getAttribute("data-id");
-          const food = state.foods.find(item => item.id === id);
-          if (food) UI.openFoodModal(food);
-        }
-      });
-
-      // Modals
-      UI.dom.btnOpenFavorites.addEventListener("click", () => UI.openFavoritesModal());
-      UI.dom.btnOpenHistory.addEventListener("click", () => UI.openHistoryModal());
-      UI.dom.modalCloseBtn.addEventListener("click", () => UI.closeModal());
-      UI.dom.modal.addEventListener("click", (e) => {
-        if (e.target === UI.dom.modal) UI.closeModal();
-      });
-
-      window.addEventListener("keydown", (e) => {
-        if (e.key === "Escape" && UI.dom.modal.classList.contains("modal-active")) {
-          UI.closeModal();
-        }
-      });
-
-      // Thao tác bên trong Modal
-      UI.dom.modalBody.addEventListener("click", (e) => {
-        const delBtn = e.target.closest(".btn-del-fav");
-        if (delBtn) {
-          const id = delBtn.getAttribute("data-id");
-          const food = state.foods.find(f => f.id === id);
-          if (food) {
-            this.toggleFavorite(food);
-            UI.openFavoritesModal();
-          }
-          return;
-        }
-
-        const viewBtn = e.target.closest(".btn-quick-view");
-        if (viewBtn) {
-          const id = viewBtn.getAttribute("data-id");
-          const food = state.foods.find(f => f.id === id);
-          if (food) {
-            UI.closeModal();
-            UI.openFoodModal(food);
-          }
-          return;
-        }
-
-        const clearHist = e.target.closest("#btn-clear-history");
-        if (clearHist) {
-          state.history = [];
-          Storage.set(CONFIG.STORAGE_KEYS.HISTORY, [], "Đã xóa lịch sử");
-          UI.openHistoryModal();
-          showToast("Đã xóa toàn bộ lịch sử", "info");
-        }
-      });
-
-      // Làm mới từ Sheets
-      UI.dom.btnForceRefresh.addEventListener("click", () => this.loadData(true));
-
-      // Mobile Bottom Nav Bar
-      UI.dom.tabNavRandom.addEventListener("click", () => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        this.triggerRandomSpin();
-      });
-      UI.dom.tabNavExplore.addEventListener("click", () => {
-        document.getElementById("explore-view").scrollIntoView({ behavior: 'smooth' });
-      });
-      UI.dom.tabNavFav.addEventListener("click", () => UI.openFavoritesModal());
-      UI.dom.tabNavHist.addEventListener("click", () => UI.openHistoryModal());
     },
 
-    toggleFavorite(food) {
-      Utils.vibrate(30);
-      const idx = state.favorites.findIndex(f => f.id === food.id);
-      if (idx > -1) {
-        state.favorites.splice(idx, 1);
-        showToast(`Đã bỏ lưu "${food.name}"`, "info");
-      } else {
-        state.favorites.push({
-          id: food.id,
-          name: food.name,
-          group: food.group
-        });
-        showToast(`Đã lưu "${food.name}" vào yêu thích!`, "success");
+    applyMood(id) {
+      const f = state.filters;
+      if (id === "all") Object.assign(f, { purpose: "all", group: "all", district: "all", budget: "all" });
+      else if (id === "time") {
+        const p = findPurposeFor(timeInfo());
+        if (!p) { toast("Chưa có món nào gắn với khung giờ này"); return; }
+        f.purpose = f.purpose === p ? "all" : p;
+        if (f.purpose !== "all") toast(`Đã lọc: ${p}`);
       }
-      Storage.set(CONFIG.STORAGE_KEYS.FAVORITES, state.favorites, "Đã cập nhật yêu thích");
-      UI.updateFavBadge();
-      UI.renderFoodsList(state.filteredFoods);
+      else if (id === "cheap") f.budget = f.budget === "max:50000" ? "all" : "max:50000";
+      else if (id === "treat") f.budget = f.budget === "min:100000" ? "all" : "min:100000";
+      U.buzz(10); onFiltersChanged();
     },
 
-    applyFilters() {
-      const f = state.activeFilters;
-      let res = state.foods.slice();
-
-      if (f.keyword) {
-        const normKey = Utils.normalizeVietnamese(f.keyword);
-        res = res.filter(item => {
-          const searchStr = Utils.normalizeVietnamese(
-            (item.name || "") + " " + (item.group || "") + " " + (item.districts ? item.districts.join(" ") : "")
-          );
-          return searchStr.includes(normKey);
-        });
-      }
-
-      if (f.purpose && f.purpose !== "all") {
-        res = res.filter(item => item.purposes && item.purposes.includes(f.purpose));
-      }
-
-      if (f.group && f.group !== "all") {
-        res = res.filter(item => item.group === f.group);
-      }
-
-      if (f.district && f.district !== "all") {
-        res = res.filter(item => item.districts && item.districts.includes(f.district));
-      }
-
-      if (f.maxBudget && f.maxBudget !== "all") {
-        const budget = parseInt(f.maxBudget, 10);
-        res = res.filter(item => {
-          if (item.minPrice === null) return true;
-          return item.minPrice <= budget;
-        });
-      }
-
-      state.filteredFoods = res;
-      UI.renderFoodsList(state.filteredFoods);
-      this.updateCandidatesCounter();
+    resetFilters() {
+      Object.assign(state.filters, { purpose: "all", group: "all", district: "all", budget: "all", sort: "default", excludeRecent: true });
+      onFiltersChanged();
     }
   };
 
-  // Khởi chạy ứng dụng
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => App.init());
-  } else {
-    App.init();
-  }
-
+  window.AgdApp = App;
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => App.init());
+  else App.init();
 })();
