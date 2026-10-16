@@ -13,7 +13,7 @@
     APP_NAME: "Ăn Gì Đây?",
     // Điền URL Google Apps Script Web App (/exec) của bạn tại đây:
     // Ví dụ: "https://script.google.com/macros/s/AKfycbzxxxxxx/exec"
-    API_URL: "https://script.google.com/macros/s/AKfycbw63l0xLd0H71b2V6i7k4o1B4Q8y5e2p_EXAMPLE/exec",
+    API_URL: "https://script.google.com/macros/s/AKfycbxoKW24CyLJCYxNpy-fL6-WvsJTYbDjZRbYW0DHGnKNlHKoaLfMBKjQvi0Oa3SZS_9A/exec",
     STORAGE_KEYS: {
       FAVORITES: "agd_favorites_v1",
       HISTORY: "agd_history_v1",
