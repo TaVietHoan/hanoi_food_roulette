@@ -1,1181 +1,1056 @@
 /**
- * Hanoi Food Engine — Royal 3D Cloche & Modern Mobile Frontend
- * File: app.js
+ * ============================================================================
+ * DỰ ÁN: ĂN GÌ ĐÂY? (SMART FOOD PICKER)
+ * File: app.js - Xử lý Logic Client-side, Three.js 3D, LocalStorage & API Engine
+ * ============================================================================
  */
 
-// =========================================================================
-// 1. CẤU HÌNH API BACKEND GOOGLE APPS SCRIPT
-// =========================================================================
-const APPS_SCRIPT_API_URL = 'https://script.google.com/macros/s/AKfycbyGWACPXXRgMousiB2-h2cxCY2K92TjVHWpSOabahOu6YLwIZf-GCIVdiKRSlnsMzNcmg/exec';
+(function () {
+  'use strict';
 
-// =========================================================================
-// 2. AUDIO SYNTHESIZER (Tạo âm thanh cơ khí & ẩm thực bằng Web Audio API)
-// =========================================================================
-let audioCtx = null;
-let soundEnabled = true;
-
-function initAudio() {
-  if (!audioCtx) {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (AudioContext) audioCtx = new AudioContext();
-  }
-  if (audioCtx && audioCtx.state === 'suspended') {
-    audioCtx.resume();
-  }
-}
-
-function playClocheRattleSound(progress = 0) {
-  if (!soundEnabled || !audioCtx) return;
-  try {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(400 + progress * 600, audioCtx.currentTime);
-
-    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.04);
-
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.04);
-  } catch (e) {}
-}
-
-function playWinChime() {
-  if (!soundEnabled || !audioCtx) return;
-  try {
-    const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51]; // C5, E5, G5, C6, E6
-    notes.forEach((freq, idx) => {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, audioCtx.currentTime + idx * 0.08);
-
-      gain.gain.setValueAtTime(0.25, audioCtx.currentTime + idx * 0.08);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + idx * 0.08 + 0.6);
-
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-
-      osc.start(audioCtx.currentTime + idx * 0.08);
-      osc.stop(audioCtx.currentTime + idx * 0.08 + 0.65);
-    });
-  } catch (e) {}
-}
-
-// =========================================================================
-// 3. STATE ỨNG DỤNG
-// =========================================================================
-let masterFoods = [];
-let filteredFoods = [];
-let isSpinning = false;
-let winningFood = null;
-let activeQuickFilter = { type: 'all', val: '' };
-let favorites = [];
-
-// Three.js 3D Objects
-let scene, camera, renderer, tableGroup, clocheDomeGroup, innerDishMesh, steamParticles;
-let isDragging = false;
-let previousPointerX = 0;
-let tableRotationSpeed = 0.005;
-
-// =========================================================================
-// 4. KHỞI CHẠY HỆ THỐNG
-// =========================================================================
-window.addEventListener('DOMContentLoaded', () => {
-  loadFavorites();
-  setupUIEvents();
-  setupMotionSensors();
-  loadData();
-});
-
-function setupUIEvents() {
-  // Âm thanh
-  const soundBtn = document.getElementById('btnSoundToggle');
-  soundBtn.addEventListener('click', () => {
-    initAudio();
-    soundEnabled = !soundEnabled;
-    document.getElementById('soundIcon').textContent = soundEnabled ? '🔊' : '🔇';
-  });
-
-  // Khởi động Audio khi chạm bất kỳ
-  window.addEventListener('touchstart', initAudio, { once: true });
-  window.addEventListener('click', initAudio, { once: true });
-
-  // Quick Chips
-  const chipContainer = document.getElementById('quickChips');
-  chipContainer.addEventListener('click', (e) => {
-    const chip = e.target.closest('.q-chip');
-    if (!chip) return;
-    chipContainer.querySelectorAll('.q-chip').forEach(c => c.classList.remove('active'));
-    chip.classList.add('active');
-    activeQuickFilter = {
-      type: chip.getAttribute('data-type'),
-      val: chip.getAttribute('data-val') || ''
-    };
-    applyFilters();
-  });
-
-  // Tìm kiếm & Bộ lọc
-  document.getElementById('filterSearch').addEventListener('input', applyFilters);
-  document.getElementById('filterDistrict').addEventListener('change', applyFilters);
-  document.getElementById('filterCategory').addEventListener('change', applyFilters);
-  document.getElementById('filterVeg').addEventListener('change', applyFilters);
-
-  // Slider giá
-  const priceSlider = document.getElementById('filterPrice');
-  const priceLabel = document.getElementById('priceLabel');
-  priceSlider.addEventListener('input', (e) => {
-    const val = parseInt(e.target.value, 10);
-    if (val >= 300000) {
-      priceLabel.textContent = 'Không giới hạn';
-    } else {
-      priceLabel.textContent = '≤ ' + val.toLocaleString('vi-VN') + ' đ';
+  // 1. CẤU HÌNH TẬP TRUNG (CONFIG)
+  const CONFIG = {
+    APP_NAME: "Ăn Gì Đây?",
+    // Điền URL Google Apps Script Web App (/exec) của bạn tại đây:
+    // Ví dụ: "https://script.google.com/macros/s/AKfycbzxxxxxx/exec"
+    API_URL: "https://script.google.com/macros/s/AKfycbw63l0xLd0H71b2V6i7k4o1B4Q8y5e2p_EXAMPLE/exec",
+    STORAGE_KEYS: {
+      FAVORITES: "agd_favorites_v1",
+      HISTORY: "agd_history_v1",
+      CONFIG: "agd_user_prefs_v1"
+    },
+    HISTORY_MAX_ITEMS: 30,
+    REQUEST_TIMEOUT_MS: 15000,
+    ANIMATION_ROLL_DURATION: 1200, // Thời gian roll tạo cảm giác hồi hộp
+    DEFAULT_PAGE_SIZE: 50,
+    FEATURE_FLAGS: {
+      enablePremiumTier: false, // Chuẩn bị cho kiến trúc SaaS tương lai
+      maxRandomPerDayForFree: 100
     }
-    applyFilters();
-  });
+  };
 
-  // Đặt lại bộ lọc
-  document.getElementById('btnResetFilters').addEventListener('click', () => {
-    document.getElementById('filterSearch').value = '';
-    document.getElementById('filterDistrict').value = '';
-    document.getElementById('filterCategory').value = '';
-    document.getElementById('filterVeg').checked = false;
-    priceSlider.value = 300000;
-    priceLabel.textContent = 'Không giới hạn';
-    chipContainer.querySelectorAll('.q-chip').forEach(c => c.classList.remove('active'));
-    chipContainer.querySelector('[data-type="all"]').classList.add('active');
-    activeQuickFilter = { type: 'all', val: '' };
-    applyFilters();
-  });
+  // 2. STATE TOÀN CỤC CỦA CLIENT
+  const state = {
+    foods: [],
+    filteredFoods: [],
+    currentFood: null,
+    favorites: [],
+    history: [],
+    filtersMeta: {
+      groups: [],
+      purposes: [],
+      districts: [],
+      priceRange: { min: 0, max: 200000 }
+    },
+    activeFilters: {
+      purpose: "all",
+      group: "all",
+      district: "all",
+      maxBudget: "all",
+      keyword: "",
+      excludeRecent: true
+    },
+    isLoading: false,
+    viewMode: "home" // "home" | "favorites" | "history"
+  };
 
-  // Thu gọn / Mở rộng bảng bộ lọc
-  const toggleBtn = document.getElementById('btnToggleFilter');
-  const filterContent = document.getElementById('filterContent');
-  const chevron = document.getElementById('filterChevron');
-  toggleBtn.addEventListener('click', () => {
-    if (filterContent.style.display === 'none') {
-      filterContent.style.display = 'flex';
-      chevron.textContent = 'Thu gọn ▲';
-    } else {
-      filterContent.style.display = 'none';
-      chevron.textContent = 'Mở rộng ▼';
+  // 3. TIỆN ÍCH AN TOÀN & BẢO MẬT
+  const Security = {
+    escapeHTML(str) {
+      if (!str) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    },
+    isValidHttpUrl(string) {
+      if (!string || typeof string !== "string") return false;
+      try {
+        const url = new URL(string);
+        return url.protocol === "http:" || url.protocol === "https:";
+      } catch (_) {
+        return false;
+      }
+    },
+    normalizeVietnamese(str) {
+      if (!str) return "";
+      return str
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/g, "d")
+        .replace(/Đ/g, "d")
+        .trim();
+    },
+    formatCurrency(val) {
+      if (val === null || val === undefined || isNaN(val)) return "Đang cập nhật";
+      return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(val);
     }
-  });
+  };
 
-  // Nút mở nắp / Bốc món
-  document.getElementById('btnSpin').addEventListener('click', launchClocheReveal);
-  document.getElementById('btnSpinAgain').addEventListener('click', () => {
-    document.getElementById('resultModal').style.display = 'none';
-    launchClocheReveal();
-  });
+  // 4. API CLIENT TẬP TRUNG (Hỗ trợ JSONP an toàn cho Google Apps Script)
+  const ApiClient = {
+    jsonp(url, params = {}) {
+      return new Promise((resolve, reject) => {
+        const callbackName = "jsonp_cb_" + Math.random().toString(36).substring(2, 9) + "_" + Date.now();
+        params.callback = callbackName;
 
-  // Nút bói quẻ nhanh
-  document.getElementById('btnRandomFortune').addEventListener('click', () => {
-    launchClocheReveal();
-  });
+        const queryString = Object.keys(params)
+          .map(k => encodeURIComponent(k) + "=" + encodeURIComponent(params[k]))
+          .join("&");
 
-  // Lắc điện thoại thủ công
-  document.getElementById('btnShakeMotion').addEventListener('click', () => {
-    launchClocheReveal();
-  });
+        const fullUrl = url + (url.indexOf("?") === -1 ? "?" : "&") + queryString;
+        const script = document.createElement("script");
+        script.src = fullUrl;
+        script.async = true;
 
-  // Modal actions
-  document.getElementById('btnCloseResult').addEventListener('click', () => {
-    document.getElementById('resultModal').style.display = 'none';
-  });
-  document.getElementById('resultModal').addEventListener('click', (e) => {
-    if (e.target.id === 'resultModal') {
-      document.getElementById('resultModal').style.display = 'none';
+        const cleanup = () => {
+          if (window[callbackName]) {
+            delete window[callbackName];
+          }
+          if (script.parentNode) {
+            script.parentNode.removeChild(script);
+          }
+        };
+
+        const timeoutId = setTimeout(() => {
+          cleanup();
+          reject(new Error("Yêu cầu quá thời gian phản hồi (" + (CONFIG.REQUEST_TIMEOUT_MS / 1000) + "s)."));
+        }, CONFIG.REQUEST_TIMEOUT_MS);
+
+        window[callbackName] = function (data) {
+          clearTimeout(timeoutId);
+          cleanup();
+          if (data && data.success) {
+            resolve(data);
+          } else {
+            reject(new Error(data && data.error ? data.error : "Không thể lấy dữ liệu."));
+          }
+        };
+
+        script.onerror = function () {
+          clearTimeout(timeoutId);
+          cleanup();
+          reject(new Error("Lỗi mạng hoặc Google Apps Script từ chối kết nối. Hãy kiểm tra URL deployment."));
+        };
+
+        document.head.appendChild(script);
+      });
+    },
+
+    async fetchFoods(forceRefresh = false) {
+      if (!CONFIG.API_URL || CONFIG.API_URL.includes("EXAMPLE")) {
+        throw new Error("Vui lòng cấu hình CONFIG.API_URL trong file app.js với deployment URL thật của Apps Script.");
+      }
+      return await this.jsonp(CONFIG.API_URL, {
+        action: "getFoods",
+        limit: 100,
+        refresh: forceRefresh ? "true" : "false"
+      });
+    },
+
+    async fetchFilters() {
+      if (!CONFIG.API_URL || CONFIG.API_URL.includes("EXAMPLE")) return null;
+      try {
+        return await this.jsonp(CONFIG.API_URL, { action: "getFilters" });
+      } catch (e) {
+        return null;
+      }
     }
-  });
+  };
 
-  document.getElementById('btnShareInvite').addEventListener('click', shareInvitation);
-  document.getElementById('btnToggleFavorite').addEventListener('click', toggleWinningFoodFavorite);
+  // 5. STORAGE SERVICE (LocalStorage có try/catch)
+  const Storage = {
+    get(key, defaultValue) {
+      try {
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : defaultValue;
+      } catch (e) {
+        return defaultValue;
+      }
+    },
+    set(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+      } catch (e) {
+        console.warn("LocalStorage bị vô hiệu hóa hoặc đầy bộ nhớ.");
+      }
+    }
+  };
 
-  // Yêu thích Modal
-  document.getElementById('btnWishlist').addEventListener('click', openWishlistModal);
-  document.getElementById('btnCloseWishlist').addEventListener('click', () => {
-    document.getElementById('wishlistModal').style.display = 'none';
-  });
+  // 6. THREE.JS 3D HERO CONTROLLER
+  const ThreeScene = {
+    renderer: null,
+    scene: null,
+    camera: null,
+    bowlGroup: null,
+    animFrameId: null,
 
-  // Lịch sử Modal
-  document.getElementById('btnHistory').addEventListener('click', openHistoryModal);
-  document.getElementById('btnCloseHistory').addEventListener('click', () => {
-    document.getElementById('historyModal').style.display = 'none';
-  });
-  document.getElementById('btnClearHistory').addEventListener('click', () => {
-    localStorage.removeItem('hanoi_food_history');
-    renderHistoryList();
-  });
-
-  window.addEventListener('resize', handleWindowResize);
-}
-
-// =========================================================================
-// 5. TẢI DỮ LIỆU
-// =========================================================================
-async function loadData() {
-  const loaderMsg = document.getElementById('loaderStatus');
-
-  if (APPS_SCRIPT_API_URL && APPS_SCRIPT_API_URL.startsWith('http')) {
-    try {
-      loaderMsg.textContent = 'Đang đồng bộ thực đơn từ Google Sheets...';
-      const res = await fetch(APPS_SCRIPT_API_URL, { redirect: 'follow' });
-      const json = await res.json();
-      if (json && json.success) {
-        onDataReady(json.data);
+    init() {
+      const container = document.getElementById("three-canvas-container");
+      const fallback = document.getElementById("three-fallback");
+      if (!container || typeof THREE === "undefined") {
+        if (fallback) fallback.style.display = "flex";
         return;
       }
-    } catch (err) {
-      console.warn('Apps Script URL chưa cấu hình hoặc bị chặn CORS, sử dụng danh mục chuẩn hóa 25+ món:', err);
+
+      try {
+        const width = container.clientWidth || 320;
+        const height = container.clientHeight || 300;
+
+        this.scene = new THREE.Scene();
+        this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+        this.camera.position.set(0, 3.2, 5.5);
+        this.camera.lookAt(0, 0, 0);
+
+        this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        this.renderer.setSize(width, height);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(this.renderer.domElement);
+
+        // Ánh sáng dịu ấm
+        const ambientLight = new THREE.AmbientLight(0xfff6ea, 0.85);
+        this.scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+        dirLight.position.set(5, 8, 6);
+        this.scene.add(dirLight);
+
+        // Tạo mô hình đại diện: Bát súp/phở 3D dễ thương
+        this.bowlGroup = new THREE.Group();
+
+        // 1. Thân bát
+        const bowlGeo = new THREE.CylinderGeometry(1.6, 0.9, 1.1, 32, 1, false);
+        const bowlMat = new THREE.MeshStandardMaterial({
+          color: 0xFFFFFF,
+          roughness: 0.25,
+          metalness: 0.05
+        });
+        const bowlMesh = new THREE.Mesh(bowlGeo, bowlMat);
+        this.bowlGroup.add(bowlMesh);
+
+        // Viền bát cam san hô
+        const rimGeo = new THREE.TorusGeometry(1.61, 0.06, 16, 32);
+        const rimMat = new THREE.MeshStandardMaterial({ color: 0xFF6B4A, roughness: 0.3 });
+        const rimMesh = new THREE.Mesh(rimGeo, rimMat);
+        rimMesh.rotation.x = Math.PI / 2;
+        rimMesh.position.y = 0.55;
+        this.bowlGroup.add(rimMesh);
+
+        // 2. Mặt nước dùng súp vàng óng
+        const soupGeo = new THREE.CircleGeometry(1.5, 32);
+        const soupMat = new THREE.MeshStandardMaterial({
+          color: 0xE8A638,
+          roughness: 0.1,
+          metalness: 0.15
+        });
+        const soupMesh = new THREE.Mesh(soupGeo, soupMat);
+        soupMesh.rotation.x = -Math.PI / 2;
+        soupMesh.position.y = 0.48;
+        this.bowlGroup.add(soupMesh);
+
+        // 3. Topping nổi (thịt viên, rau thơm)
+        const toppingGeo1 = new THREE.DodecahedronGeometry(0.3, 0);
+        const toppingMat1 = new THREE.MeshStandardMaterial({ color: 0x8C4A32, roughness: 0.8 });
+        for (let i = 0; i < 3; i++) {
+          const tMesh = new THREE.Mesh(toppingGeo1, toppingMat1);
+          tMesh.position.set(Math.cos(i * 2) * 0.7, 0.55, Math.sin(i * 2) * 0.6);
+          this.bowlGroup.add(tMesh);
+        }
+
+        const herbGeo = new THREE.ConeGeometry(0.18, 0.3, 5);
+        const herbMat = new THREE.MeshStandardMaterial({ color: 0x38B29C, roughness: 0.5 });
+        const herb = new THREE.Mesh(herbGeo, herbMat);
+        herb.position.set(0, 0.6, 0);
+        this.bowlGroup.add(herb);
+
+        this.scene.add(this.bowlGroup);
+
+        // Tương tác chạm/di chuột nhẹ
+        let mouseX = 0;
+        let targetRotation = 0;
+        window.addEventListener("pointermove", (e) => {
+          mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+          targetRotation = mouseX * 0.4;
+        });
+
+        const animate = () => {
+          this.animFrameId = requestAnimationFrame(animate);
+          if (this.bowlGroup) {
+            this.bowlGroup.rotation.y += 0.008;
+            this.bowlGroup.rotation.y += (targetRotation - this.bowlGroup.rotation.y) * 0.05;
+            this.bowlGroup.position.y = Math.sin(Date.now() * 0.002) * 0.08;
+          }
+          this.renderer.render(this.scene, this.camera);
+        };
+        animate();
+
+        window.addEventListener("resize", () => {
+          if (!container || !this.camera || !this.renderer) return;
+          const w = container.clientWidth;
+          const h = container.clientHeight;
+          this.camera.aspect = w / h;
+          this.camera.updateProjectionMatrix();
+          this.renderer.setSize(w, h);
+        });
+
+      } catch (err) {
+        if (fallback) fallback.style.display = "flex";
+      }
     }
+  };
+
+  // 7. TOAST NOTIFICATION
+  function showToast(message, type = "info") {
+    const container = document.getElementById("toast-container");
+    if (!container) return;
+
+    const toast = document.createElement("div");
+    toast.className = "toast-item";
+    
+    let iconSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
+    if (type === "success") {
+      iconSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38B29C" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    } else if (type === "error") {
+      iconSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF6B4A" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>';
+    }
+
+    toast.innerHTML = iconSvg + "<span>" + Security.escapeHTML(message) + "</span>";
+    container.appendChild(toast);
+
+    setTimeout(() => {
+      toast.style.opacity = "0";
+      toast.style.transition = "opacity 0.3s ease";
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 300);
+    }, 3200);
   }
 
-  onDataReady(getFallBackHanoiDataset());
-}
+  // 8. LOGIC RANDOM CHỌN MÓN NGUYÊN BẢN (CORE ENGINE)
+  const FoodEngine = {
+    /**
+     * Lọc danh sách ứng viên dựa trên bộ lọc hiện tại
+     */
+    getEligibleCandidates() {
+      const f = state.activeFilters;
+      let list = state.foods.slice();
 
-function onDataReady(payload) {
-  masterFoods = payload.foods || [];
+      // 1. Lọc theo mục đích (exact match theo mảng purposes)
+      if (f.purpose && f.purpose !== "all") {
+        list = list.filter(item => item.purposes && item.purposes.includes(f.purpose));
+      }
 
-  // Điền Quận / Huyện
-  const distSelect = document.getElementById('filterDistrict');
-  distSelect.innerHTML = '<option value="">Toàn bộ 36 phố phường & Thủ đô</option>';
-  if (payload.districts) {
-    payload.districts.forEach(dst => {
-      const opt = document.createElement('option');
-      opt.value = dst;
-      opt.textContent = dst;
-      distSelect.appendChild(opt);
-    });
-  }
+      // 2. Lọc theo nhóm món
+      if (f.group && f.group !== "all") {
+        list = list.filter(item => item.group === f.group);
+      }
 
-  // Điền Danh mục
-  const catSelect = document.getElementById('filterCategory');
-  catSelect.innerHTML = '<option value="">Tất cả danh mục món</option>';
-  if (payload.categories) {
-    payload.categories.forEach(cat => {
-      const opt = document.createElement('option');
-      opt.value = cat;
-      opt.textContent = cat;
-      catSelect.appendChild(opt);
-    });
-  }
+      // 3. Lọc theo quận
+      if (f.district && f.district !== "all") {
+        list = list.filter(item => item.district === f.district);
+      }
 
-  applyFilters();
-  initRoyalCloche3DEngine();
-  document.getElementById('loaderScreen').style.display = 'none';
-}
+      // 4. Lọc theo ngân sách (giao nhau hợp lệ giữa minPrice/maxPrice và ngân sách người dùng)
+      if (f.maxBudget && f.maxBudget !== "all") {
+        const budgetLimit = parseInt(f.maxBudget, 10);
+        list = list.filter(item => {
+          if (item.minPrice === null && item.maxPrice === null) return true; // Chưa rõ giá thì vẫn cho cơ hội
+          if (item.minPrice !== null && item.minPrice > budgetLimit) return false;
+          return true;
+        });
+      }
 
-// =========================================================================
-// 6. LOGIC LỌC ĐA TIÊU CHÍ (CHÍNH XÁC KHOẢNG GIÁ & TÂM TRẠNG)
-// =========================================================================
-function applyFilters() {
-  if (isSpinning) return;
-
-  const search = document.getElementById('filterSearch').value.toLowerCase().trim();
-  const selectedDistrict = document.getElementById('filterDistrict').value.toLowerCase().trim();
-  const selectedCat = document.getElementById('filterCategory').value;
-  const isVegOnly = document.getElementById('filterVeg').checked;
-  const maxPriceFilter = parseInt(document.getElementById('filterPrice').value, 10);
-
-  filteredFoods = masterFoods.filter(item => {
-    // 1. Tìm kiếm tên món, từ khóa và mô tả
-    if (search) {
-      const matchName = item.name.toLowerCase().includes(search);
-      const matchTag = item.tags && item.tags.toLowerCase().includes(search);
-      const matchDesc = item.description && item.description.toLowerCase().includes(search);
-      if (!matchName && !matchTag && !matchDesc) return false;
-    }
-
-    // 2. Lọc khu vực
-    if (selectedDistrict) {
-      const hasDistrict = (item.areas && item.areas.some(area => area.toLowerCase().includes(selectedDistrict))) ||
-                          (item.primaryArea && item.primaryArea.toLowerCase().includes(selectedDistrict));
-      if (!hasDistrict) return false;
-    }
-
-    // 3. Lọc danh mục
-    if (selectedCat && item.category !== selectedCat) return false;
-
-    // 4. Lọc chay
-    if (isVegOnly && !item.isVegetarian) return false;
-
-    // 5. Lọc mức giá chính xác (kiểm tra minPrice của món với ngân sách người dùng)
-    if (maxPriceFilter < 300000) {
-      const itemPriceToCompare = item.minPrice || item.price || 0;
-      if (itemPriceToCompare > maxPriceFilter) return false;
-    }
-
-    // 6. Quick Chips lọc thời gian & tâm trạng
-    if (activeQuickFilter.type === 'time') {
-      const mt = (item.mealTime || '').toLowerCase();
-      if (!mt.includes(activeQuickFilter.val.toLowerCase()) && !mt.includes('cả ngày')) return false;
-    } else if (activeQuickFilter.type === 'mood') {
-      const md = (item.mood || '').toLowerCase();
-      if (!md.includes(activeQuickFilter.val.toLowerCase()) && !md.includes('mọi dịp')) return false;
-    } else if (activeQuickFilter.type === 'budget' && activeQuickFilter.val === 'cheap') {
-      const p = item.minPrice || item.price || 0;
-      if (p > 45000) return false;
-    }
-
-    return true;
-  });
-
-  // Cập nhật số lượng
-  const counterPill = document.getElementById('foodCountPill');
-  counterPill.textContent = `${filteredFoods.length} món sẵn sàng`;
-
-  const btnSpin = document.getElementById('btnSpin');
-  const btnLabel = document.getElementById('btnSpinLabel');
-  if (filteredFoods.length === 0) {
-    btnSpin.disabled = true;
-    btnLabel.textContent = 'KHÔNG CÓ MÓN PHÙ HỢP';
-  } else {
-    btnSpin.disabled = false;
-    btnLabel.textContent = 'MỞ NẮP CHỌN MÓN NGAY';
-  }
-}
-
-// =========================================================================
-// 7. KHỞI TẠO BÀN TIỆC 3D HOÀNG KIM & NẮP ĐẬY CLOCHE BÍ ẨN (THREE.JS)
-// =========================================================================
-function initRoyalCloche3DEngine() {
-  const container = document.getElementById('arenaContainer');
-  const canvas = document.getElementById('cloche3dCanvas');
-  const width = container.clientWidth;
-  const height = container.clientHeight;
-
-  scene = new THREE.Scene();
-
-  camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
-  camera.position.set(0, 3.8, 6.2);
-  camera.lookAt(0, 0.5, 0);
-
-  renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
-  renderer.setSize(width, height);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.2;
-
-  // Ánh sáng Studio hoàng gia
-  const ambientLight = new THREE.AmbientLight(0xfff7ed, 1.2);
-  scene.add(ambientLight);
-
-  const mainLight = new THREE.DirectionalLight(0xffeedd, 2.0);
-  mainLight.position.set(5, 8, 6);
-  scene.add(mainLight);
-
-  const rimLight = new THREE.PointLight(0xff6b2b, 2.5, 12);
-  rimLight.position.set(-4, 3, -3);
-  scene.add(rimLight);
-
-  const goldSpot = new THREE.SpotLight(0xf59e0b, 3.0, 15, Math.PI / 4, 0.4);
-  goldSpot.position.set(0, 7, 0);
-  goldSpot.target.position.set(0, 0, 0);
-  scene.add(goldSpot);
-  scene.add(goldSpot.target);
-
-  // Group toàn bộ bàn tiệc
-  tableGroup = new THREE.Group();
-  scene.add(tableGroup);
-
-  // 1. Đế khay mạ vàng Champagne sang trọng
-  const trayGeom = new THREE.CylinderGeometry(2.4, 2.55, 0.14, 64);
-  const trayMat = new THREE.MeshStandardMaterial({
-    color: 0xd4af37,
-    metalness: 0.92,
-    roughness: 0.18
-  });
-  const trayMesh = new THREE.Mesh(trayGeom, trayMat);
-  trayMesh.position.y = 0.07;
-  tableGroup.add(trayMesh);
-
-  // Vành khay nổi bo viền
-  const rimGeom = new THREE.TorusGeometry(2.45, 0.08, 16, 64);
-  rimGeom.rotateX(Math.PI / 2);
-  const rimMesh = new THREE.Mesh(rimGeom, trayMat);
-  rimMesh.position.y = 0.15;
-  tableGroup.add(rimMesh);
-
-  // Đĩa sứ trắng ngọc bên trong
-  const plateGeom = new THREE.CylinderGeometry(2.0, 1.8, 0.08, 64);
-  const plateMat = new THREE.MeshStandardMaterial({
-    color: 0x1a2236,
-    metalness: 0.2,
-    roughness: 0.3
-  });
-  const plateMesh = new THREE.Mesh(plateGeom, plateMat);
-  plateMesh.position.y = 0.16;
-  tableGroup.add(plateMesh);
-
-  // 2. Món ăn phát quang tượng trưng bên trong đĩa
-  const foodCoreGeom = new THREE.CylinderGeometry(1.2, 1.4, 0.25, 32);
-  const foodCoreMat = new THREE.MeshStandardMaterial({
-    color: 0xff4d29,
-    emissive: 0xff3300,
-    emissiveIntensity: 0.4,
-    roughness: 0.4
-  });
-  innerDishMesh = new THREE.Mesh(foodCoreGeom, foodCoreMat);
-  innerDishMesh.position.y = 0.32;
-  tableGroup.add(innerDishMesh);
-
-  // 3. Nắp Đậy Bí Ẩn Hoàng Gia (Cloche Dome Group)
-  clocheDomeGroup = new THREE.Group();
-  clocheDomeGroup.position.y = 0.18;
-  tableGroup.add(clocheDomeGroup);
-
-  // Thân vòm nắp Cloche (Kim loại sáng bóng)
-  const clocheGeom = new THREE.SphereGeometry(2.05, 48, 32, 0, Math.PI * 2, 0, Math.PI / 2);
-  const clocheMat = new THREE.MeshStandardMaterial({
-    color: 0xffdf73,
-    metalness: 0.95,
-    roughness: 0.12,
-    side: THREE.DoubleSide
-  });
-  const domeMesh = new THREE.Mesh(clocheGeom, clocheMat);
-  clocheDomeGroup.add(domeMesh);
-
-  // Viền gờ chân nắp
-  const clocheLipGeom = new THREE.TorusGeometry(2.05, 0.07, 16, 64);
-  clocheLipGeom.rotateX(Math.PI / 2);
-  const lipMesh = new THREE.Mesh(clocheLipGeom, clocheMat);
-  clocheDomeGroup.add(lipMesh);
-
-  // Tay nắm mạ vàng đỉnh nắp
-  const handleStemGeom = new THREE.CylinderGeometry(0.12, 0.16, 0.3, 16);
-  const handleStem = new THREE.Mesh(handleStemGeom, clocheMat);
-  handleStem.position.y = 2.15;
-  clocheDomeGroup.add(handleStem);
-
-  const handleRingGeom = new THREE.TorusGeometry(0.24, 0.07, 16, 32);
-  handleRingGeom.rotateY(Math.PI / 2);
-  const handleRing = new THREE.Mesh(handleRingGeom, clocheMat);
-  handleRing.position.y = 2.4;
-  clocheDomeGroup.add(handleRing);
-
-  // 4. Hạt khói / Hào quang thơm bốc lên (Steam Particle System)
-  const particleCount = 45;
-  const steamGeom = new THREE.BufferGeometry();
-  const steamPositions = new Float32Array(particleCount * 3);
-  for (let i = 0; i < particleCount * 3; i += 3) {
-    steamPositions[i] = (Math.random() - 0.5) * 1.8;
-    steamPositions[i + 1] = Math.random() * 2.5 + 0.5;
-    steamPositions[i + 2] = (Math.random() - 0.5) * 1.8;
-  }
-  steamGeom.setAttribute('position', new THREE.BufferAttribute(steamPositions, 3));
-
-  const steamMat = new THREE.PointsMaterial({
-    color: 0xffaa44,
-    size: 0.12,
-    transparent: true,
-    opacity: 0.5,
-    blending: THREE.AdditiveBlending
-  });
-  steamParticles = new THREE.Points(steamGeom, steamMat);
-  tableGroup.add(steamParticles);
-
-  // Thiết lập sự kiện chạm / vuốt 3D mượt mà
-  setupPointerControls(canvas);
-
-  // Render loop
-  function animate() {
-    requestAnimationFrame(animate);
-
-    if (!isSpinning && !isDragging) {
-      tableGroup.rotation.y += tableRotationSpeed;
-    }
-
-    // Chuyển động nhẹ của hạt khói ẩm thực
-    if (steamParticles) {
-      const positions = steamParticles.geometry.attributes.position.array;
-      for (let i = 1; i < positions.length; i += 3) {
-        positions[i] += 0.012;
-        if (positions[i] > 3.2) {
-          positions[i] = 0.5;
+      // 5. Loại trừ các món vừa chọn gần đây (5 món gần nhất trong lịch sử)
+      if (f.excludeRecent && state.history.length > 0) {
+        const recentIds = state.history.slice(0, 5).map(h => h.id);
+        const withoutRecent = list.filter(item => !recentIds.includes(item.id));
+        // Nếu sau khi loại trừ vẫn còn món thì áp dụng, nếu hết sạch món thì dùng lại danh sách đầy đủ
+        if (withoutRecent.length > 0) {
+          list = withoutRecent;
         }
       }
-      steamParticles.geometry.attributes.position.needsUpdate = true;
-    }
 
-    renderer.render(scene, camera);
-  }
-  animate();
-}
+      return list;
+    },
 
-// Hỗ trợ vuốt xoay 3D trên cả điện thoại (Touch) và máy tính (Mouse)
-function setupPointerControls(canvas) {
-  const onPointerDown = (e) => {
-    isDragging = true;
-    previousPointerX = e.clientX || (e.touches && e.touches[0].clientX) || 0;
-  };
-
-  const onPointerMove = (e) => {
-    if (!isDragging) return;
-    const clientX = e.clientX || (e.touches && e.touches[0].clientX) || 0;
-    const deltaX = clientX - previousPointerX;
-    tableGroup.rotation.y += deltaX * 0.008;
-    previousPointerX = clientX;
-  };
-
-  const onPointerUp = () => {
-    isDragging = false;
-  };
-
-  canvas.addEventListener('mousedown', onPointerDown);
-  window.addEventListener('mousemove', onPointerMove);
-  window.addEventListener('mouseup', onPointerUp);
-
-  canvas.addEventListener('touchstart', onPointerDown, { passive: true });
-  window.addEventListener('touchmove', onPointerMove, { passive: true });
-  window.addEventListener('touchend', onPointerUp);
-}
-
-// =========================================================================
-// 8. CƠ CHẾ MỞ NẮP 3D HOÀNG KIM (THE CLOCHE REVEAL DYNAMICS)
-// =========================================================================
-function launchClocheReveal() {
-  if (isSpinning || !filteredFoods || filteredFoods.length === 0) return;
-
-  initAudio();
-  isSpinning = true;
-
-  const btnSpin = document.getElementById('btnSpin');
-  const btnLabel = document.getElementById('btnSpinLabel');
-  btnSpin.disabled = true;
-  btnLabel.textContent = 'ĐANG MỞ NẮP BÍ ẨN...';
-
-  const tickerSub = document.getElementById('tickerSub');
-  const tickerTitle = document.getElementById('tickerTitle');
-  tickerSub.textContent = '✨ MÓN NGON ĐANG ĐƯỢC CHỌN';
-
-  // Chọn ngẫu nhiên món chiến thắng
-  const winIdx = Math.floor(Math.random() * filteredFoods.length);
-  winningFood = filteredFoods[winIdx];
-
-  const duration = 3800; // 3.8s
-  const startTime = performance.now();
-  let lastShuffleTime = 0;
-
-  function frameUpdate(now) {
-    const elapsed = now - startTime;
-    const p = Math.min(elapsed / duration, 1);
-
-    // 1. Nhảy tên món liên tục trên Ticker tạo kịch tính
-    if (now - lastShuffleTime > 75 && p < 0.85) {
-      lastShuffleTime = now;
-      const tempFood = filteredFoods[Math.floor(Math.random() * filteredFoods.length)];
-      tickerTitle.textContent = tempFood.name;
-      playClocheRattleSound(p);
-    }
-
-    // 2. Chuyển động vật lý nắp Cloche
-    if (p < 0.45) {
-      // Giai đoạn 1: Rung lắc cơ học nắp đậy báo hiệu món đang sôi sục
-      const shakeAmp = 0.07 * (p / 0.45);
-      clocheDomeGroup.position.x = (Math.random() - 0.5) * shakeAmp;
-      clocheDomeGroup.position.z = (Math.random() - 0.5) * shakeAmp;
-      clocheDomeGroup.rotation.z = (Math.random() - 0.5) * shakeAmp;
-      tableGroup.rotation.y += 0.035;
-    } else {
-      // Giai đoạn 2: Nắp Cloche bay vút lên cao hé lộ đĩa thức ăn vàng kim
-      const liftProgress = (p - 0.45) / 0.55;
-      const easeLift = 1 - Math.pow(1 - liftProgress, 3);
-
-      clocheDomeGroup.position.x = 0;
-      clocheDomeGroup.position.z = 0;
-      clocheDomeGroup.position.y = 0.18 + easeLift * 3.6;
-      clocheDomeGroup.rotation.x = -easeLift * 0.4;
-      clocheDomeGroup.rotation.z = easeLift * 0.2;
-
-      tableGroup.rotation.y += 0.02 * (1 - liftProgress);
-
-      // Món ăn bên trong phát quang rực rỡ
-      if (innerDishMesh) {
-        innerDishMesh.material.emissiveIntensity = 0.4 + easeLift * 1.5;
+    /**
+     * Quay ngẫu nhiên công bằng, không thiên vị hàng đầu Sheet
+     */
+    spinRandom() {
+      const candidates = this.getEligibleCandidates();
+      if (!candidates || candidates.length === 0) {
+        return null;
       }
+      // Chọn ngẫu nhiên đều
+      const randomIndex = Math.floor(Math.random() * candidates.length);
+      return candidates[randomIndex];
     }
+  };
 
-    if (p < 1) {
-      requestAnimationFrame(frameUpdate);
-    } else {
-      // Hoàn tất
-      tickerTitle.textContent = winningFood.name;
-      tickerSub.textContent = '🎉 ĐÃ TÌM THẤY MÓN NGON HOÀN HẢO!';
+  // 9. RENDER GIAO DIỆN & TƯƠNG TÁC DOM
+  const UI = {
+    initElements() {
+      this.dom = {
+        foodsGrid: document.getElementById("foods-grid-container"),
+        foodCountLabel: document.getElementById("food-count-label"),
+        searchBox: document.getElementById("search-box"),
+        filterPurpose: document.getElementById("filter-purpose"),
+        filterGroup: document.getElementById("filter-group"),
+        filterDistrict: document.getElementById("filter-district"),
+        filterBudget: document.getElementById("filter-budget"),
+        chkExcludeRecent: document.getElementById("chk-exclude-recent"),
+        btnResetFilters: document.getElementById("btn-reset-filters"),
+        btnHeroSpin: document.getElementById("btn-hero-spin"),
+        btnSpinAgain: document.getElementById("btn-spin-again"),
+        btnExploreScroll: document.getElementById("btn-explore-scroll"),
+        randomSection: document.getElementById("random-result-section"),
+        resName: document.getElementById("res-food-name"),
+        resDesc: document.getElementById("res-food-desc"),
+        resMetaChips: document.getElementById("res-meta-chips"),
+        resVenueBox: document.getElementById("res-venue-box"),
+        resVenueName: document.getElementById("res-venue-name"),
+        resVenueAddress: document.getElementById("res-venue-address"),
+        btnOpenMapRes: document.getElementById("btn-open-map-res"),
+        btnShareRes: document.getElementById("btn-share-res"),
+        btnToggleFavRes: document.getElementById("btn-toggle-fav-res"),
+        modal: document.getElementById("detail-modal"),
+        modalTitle: document.getElementById("modal-title"),
+        modalBody: document.getElementById("modal-body-content"),
+        modalCloseBtn: document.getElementById("modal-close-btn"),
+        favBadge: document.getElementById("fav-count-badge"),
+        btnOpenFavorites: document.getElementById("btn-open-favorites"),
+        btnOpenHistory: document.getElementById("btn-open-history"),
+        navTabRandom: document.getElementById("tab-nav-random"),
+        navTabExplore: document.getElementById("tab-nav-explore"),
+        navTabFav: document.getElementById("tab-nav-favorites"),
+        navTabHist: document.getElementById("tab-nav-history")
+      };
+    },
 
-      playWinChime();
-      fireConfetti();
-      recordHistory(winningFood);
+    populateFilterOptions() {
+      const { groups, purposes, districts } = state.filtersMeta;
 
-      setTimeout(() => {
-        showWinningModal(winningFood);
-        isSpinning = false;
-        btnSpin.disabled = false;
-        btnLabel.textContent = 'MỞ NẮP CHỌN MÓN NGAY';
+      // Populate Mục đích
+      if (purposes && purposes.length) {
+        this.dom.filterPurpose.innerHTML = '<option value="all">Tất cả mục đích</option>' +
+          purposes.map(p => `<option value="${Security.escapeHTML(p)}">${Security.escapeHTML(p)}</option>`).join("");
+      }
 
-        // Đậy nắp lại từ từ sau khi xem
-        setTimeout(() => {
-          resetClocheDome();
-        }, 800);
-      }, 500);
-    }
-  }
+      // Populate Nhóm món
+      if (groups && groups.length) {
+        this.dom.filterGroup.innerHTML = '<option value="all">Tất cả nhóm</option>' +
+          groups.map(g => `<option value="${Security.escapeHTML(g)}">${Security.escapeHTML(g)}</option>`).join("");
+      }
 
-  requestAnimationFrame(frameUpdate);
-}
+      // Populate Quận
+      if (districts && districts.length) {
+        this.dom.filterDistrict.innerHTML = '<option value="all">Tất cả quận</option>' +
+          districts.map(d => `<option value="${Security.escapeHTML(d)}">${Security.escapeHTML(d)}</option>`).join("");
+      }
+    },
 
-function resetClocheDome() {
-  if (!clocheDomeGroup) return;
-  const startY = clocheDomeGroup.position.y;
-  const startTime = performance.now();
-  const resetDuration = 600;
+    renderSkeleton() {
+      let html = "";
+      for (let i = 0; i < 6; i++) {
+        html += `
+          <div class="skeleton-card">
+            <div class="skeleton-line" style="width: 40%; height: 20px;"></div>
+            <div class="skeleton-line" style="width: 80%;"></div>
+            <div class="skeleton-line" style="width: 60%;"></div>
+            <div class="skeleton-line" style="width: 50%; margin-top: 30px;"></div>
+          </div>
+        `;
+      }
+      this.dom.foodsGrid.innerHTML = html;
+    },
 
-  function lower(now) {
-    const elapsed = now - startTime;
-    const progress = Math.min(elapsed / resetDuration, 1);
-    const ease = 1 - Math.pow(1 - progress, 2);
+    renderFoodsList(foodsToRender) {
+      if (!foodsToRender || foodsToRender.length === 0) {
+        this.dom.foodsGrid.innerHTML = `
+          <div class="state-box" style="grid-column: 1 / -1;">
+            <div class="state-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+            </div>
+            <h3 class="state-title">Không tìm thấy món ăn phù hợp</h3>
+            <p class="state-desc">Hãy thử nới lỏng ngân sách, chọn 'Tất cả quận' hoặc tìm kiếm với từ khóa khác xem sao nhé!</p>
+            <button class="btn-sub" onclick="document.getElementById('btn-reset-filters').click()">Xóa toàn bộ bộ lọc</button>
+          </div>
+        `;
+        this.dom.foodCountLabel.textContent = "Không có kết quả";
+        return;
+      }
 
-    clocheDomeGroup.position.y = startY - (startY - 0.18) * ease;
-    clocheDomeGroup.rotation.x *= (1 - ease);
-    clocheDomeGroup.rotation.z *= (1 - ease);
+      this.dom.foodCountLabel.textContent = `Hiển thị ${foodsToRender.length} món ngon sẵn sàng phục vụ`;
 
-    if (innerDishMesh) {
-      innerDishMesh.material.emissiveIntensity = 0.4;
-    }
+      const cardsHtml = foodsToRender.map(item => {
+        const isFav = state.favorites.some(f => f.id === item.id);
+        const priceDisplay = item.minPrice !== null && item.maxPrice !== null
+          ? `${Security.formatCurrency(item.minPrice)} - ${Security.formatCurrency(item.maxPrice)}`
+          : (item.minPrice ? Security.formatCurrency(item.minPrice) : "Giá bình dân");
 
-    if (progress < 1) {
-      requestAnimationFrame(lower);
-    } else {
-      clocheDomeGroup.position.set(0, 0.18, 0);
-      clocheDomeGroup.rotation.set(0, 0, 0);
-    }
-  }
-  requestAnimationFrame(lower);
-}
+        return `
+          <div class="food-card" data-id="${Security.escapeHTML(item.id)}">
+            <div class="food-card-top">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                <span class="tag-chip">${Security.escapeHTML(item.group || "Món ngon")}</span>
+                <button class="btn-card-fav" data-id="${Security.escapeHTML(item.id)}" style="color: ${isFav ? 'var(--primary)' : 'var(--text-light)'};">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="${isFav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                </button>
+              </div>
+              <h3 class="food-card-title">${Security.escapeHTML(item.name)}</h3>
+              <p class="food-card-desc">${Security.escapeHTML(item.description || "Hương vị hấp dẫn, không thể bỏ qua.")}</p>
+              ${item.restaurant ? `<div class="food-card-venue"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg> <span>${Security.escapeHTML(item.restaurant)} ${item.district ? `(${Security.escapeHTML(item.district)})` : ''}</span></div>` : ''}
+            </div>
+            <div class="food-card-bottom">
+              <span class="price-chip">${Security.escapeHTML(priceDisplay)}</span>
+              <button class="btn-sub btn-card-detail" data-id="${Security.escapeHTML(item.id)}" style="padding: 6px 14px; font-size: 13px;">Chi tiết</button>
+            </div>
+          </div>
+        `;
+      }).join("");
 
-// =========================================================================
-// 9. MODAL KẾT QUẢ, QUẺ BÓI & ĐẶT MÓN
-// =========================================================================
-function showWinningModal(food) {
-  if (!food) return;
+      this.dom.foodsGrid.innerHTML = cardsHtml;
+    },
 
-  document.getElementById('resCategory').textContent = food.category || 'Món ngon phố cổ';
-  document.getElementById('resTitle').textContent = food.name;
-  document.getElementById('resPrice').textContent = food.priceDisplay || 'Giá bình dân';
-  document.getElementById('resDesc').textContent = food.description || 'Món ngon chuẩn vị truyền thống Hà Nội.';
-  document.getElementById('resAreaTag').textContent = '📍 ' + (food.primaryArea || 'Hà Nội');
-  document.getElementById('resTimeTag').textContent = '⏰ ' + (food.mealTime || 'Mọi thời điểm');
-  document.getElementById('resVegTag').textContent = food.isVegetarian ? '🥗 Món chay thanh tịnh' : '🥩 Món mặn đậm đà';
+    displayRandomResult(food) {
+      if (!food) {
+        showToast("Không tìm thấy món ăn khớp với bộ lọc hiện tại!", "error");
+        return;
+      }
 
-  // Quẻ bói ẩm thực theo món
-  const fortuneQuotes = [
-    `✨ Hôm nay số hưởng, húp một ngụm nước dùng đậm đà của ${food.name} là cả ngày công việc hanh thông, gặp nhiều vận đỏ!`,
-    `🍜 Nạp ngay năng lượng với ${food.name}. Hương vị phố cổ sẽ giúp bạn đánh tan áp lực, tâm trạng vui tươi cả ngày!`,
-    `🥢 Điềm lành ẩm thực: Hôm nay đừng do dự, món ${food.name} chính là chân ái được định sẵn cho chiếc bụng đói của bạn!`,
-    `✨ Tinh hoa hội tụ! Bữa ăn này sẽ đem lại nhiều cảm hứng sáng tạo và cuộc trò chuyện rôm rả bên bạn bè.`
-  ];
-  document.getElementById('resFortune').innerHTML = fortuneQuotes[Math.floor(Math.random() * fortuneQuotes.length)];
+      state.currentFood = food;
 
-  // Cập nhật trạng thái nút Thích
-  updateFavoriteButtonState(food);
+      // Cập nhật giao diện thẻ kết quả
+      this.dom.resName.textContent = food.name;
+      this.dom.resDesc.textContent = food.description || "Món ăn tuyệt vời được cộng đồng gợi ý cho bữa ăn hôm nay.";
 
-  // Render quán ăn
-  const container = document.getElementById('resRestaurantsContainer');
-  container.innerHTML = '';
+      // Meta chips
+      let chipsHtml = `<span class="tag-chip">${Security.escapeHTML(food.group)}</span>`;
+      if (food.purposes && food.purposes.length) {
+        food.purposes.forEach(p => {
+          chipsHtml += `<span class="tag-chip">${Security.escapeHTML(p)}</span>`;
+        });
+      }
+      const priceText = food.minPrice !== null && food.maxPrice !== null
+        ? `${Security.formatCurrency(food.minPrice)} - ${Security.formatCurrency(food.maxPrice)}`
+        : (food.minPrice ? Security.formatCurrency(food.minPrice) : "Giá hợp lý");
+      chipsHtml += `<span class="price-chip">${Security.escapeHTML(priceText)}</span>`;
+      this.dom.resMetaChips.innerHTML = chipsHtml;
 
-  if (food.restaurants && food.restaurants.length > 0) {
-    food.restaurants.forEach(rest => {
-      const card = document.createElement('div');
-      card.className = 'restaurant-card';
-      card.innerHTML = `
-        <div class="rest-head">
-          <span class="rest-title">${escapeSafe(rest.name)}</span>
-          <span class="rest-price-pill">${escapeSafe(rest.priceRange)}</span>
-        </div>
-        <div class="rest-addr">📍 ${escapeSafe(rest.address)} (${escapeSafe(rest.district)})</div>
-        <div class="rest-links">
-          <a href="${escapeSafe(rest.mapsUrl)}" target="_blank" rel="noopener noreferrer" class="btn-link-action btn-link-maps">
-            <span>🗺️ Chỉ đường</span>
+      // Quán & địa chỉ
+      if (food.restaurant || food.address) {
+        this.dom.resVenueBox.style.display = "block";
+        this.dom.resVenueName.textContent = food.restaurant || "Quán ăn địa phương gợi ý";
+        this.dom.resVenueAddress.textContent = (food.address || "") + (food.district ? ` (${food.district})` : "");
+      } else {
+        this.dom.resVenueBox.style.display = "none";
+      }
+
+      // Link Google Maps
+      if (food.mapUrl && Security.isValidHttpUrl(food.mapUrl)) {
+        this.dom.btnOpenMapRes.style.display = "inline-flex";
+        this.dom.btnOpenMapRes.href = food.mapUrl;
+      } else {
+        this.dom.btnOpenMapRes.style.display = "none";
+      }
+
+      // Nút Favorite trên result
+      const isFav = state.favorites.some(f => f.id === food.id);
+      this.updateFavIconState(this.dom.btnToggleFavRes, isFav);
+
+      // Hiển thị khung kết quả & cuộn nhẹ tới nó
+      this.dom.randomSection.classList.add("active");
+      this.dom.randomSection.scrollIntoView({ behavior: "smooth", block: "center" });
+
+      // Lưu vào Lịch sử
+      this.addToHistory(food);
+    },
+
+    updateFavIconState(btn, isFav) {
+      if (!btn) return;
+      btn.style.color = isFav ? "var(--primary)" : "var(--text-muted)";
+      const svg = btn.querySelector("svg");
+      if (svg) {
+        svg.setAttribute("fill", isFav ? "currentColor" : "none");
+      }
+    },
+
+    updateFavBadge() {
+      const count = state.favorites.length;
+      if (count > 0) {
+        this.dom.favBadge.style.display = "flex";
+        this.dom.favBadge.textContent = count > 99 ? "99+" : count;
+      } else {
+        this.dom.favBadge.style.display = "none";
+      }
+    },
+
+    addToHistory(food) {
+      // Tránh duplicate id kề nhau
+      const newEntry = {
+        id: food.id,
+        name: food.name,
+        group: food.group,
+        restaurant: food.restaurant,
+        district: food.district,
+        time: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
+        date: new Date().toLocaleDateString("vi-VN")
+      };
+
+      state.history.unshift(newEntry);
+      if (state.history.length > CONFIG.HISTORY_MAX_ITEMS) {
+        state.history.pop();
+      }
+      Storage.set(CONFIG.STORAGE_KEYS.HISTORY, state.history);
+    },
+
+    openFoodModal(food) {
+      if (!food) return;
+      this.dom.modalTitle.textContent = food.name;
+
+      const isFav = state.favorites.some(f => f.id === food.id);
+      const priceText = food.minPrice !== null && food.maxPrice !== null
+        ? `${Security.formatCurrency(food.minPrice)} - ${Security.formatCurrency(food.maxPrice)}`
+        : (food.minPrice ? Security.formatCurrency(food.minPrice) : "Đang cập nhật");
+
+      let mapsBtnHtml = "";
+      if (food.mapUrl && Security.isValidHttpUrl(food.mapUrl)) {
+        mapsBtnHtml = `
+          <a href="${Security.escapeHTML(food.mapUrl)}" target="_blank" rel="noopener noreferrer" class="btn-main" style="margin-top: 15px; width: 100%; justify-content: center;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            Mở trên Google Maps
           </a>
-          <a href="https://shopeefood.vn/ha-noi/danh-sach-quan-mon-${encodeURIComponent(food.name)}" target="_blank" rel="noopener noreferrer" class="btn-link-action btn-link-food">
-            <span>🛵 Đặt giao tận nơi</span>
-          </a>
+        `;
+      }
+
+      this.dom.modalBody.innerHTML = `
+        <div style="margin-bottom: 14px;">
+          <span class="tag-chip">${Security.escapeHTML(food.group)}</span>
+          <span class="price-chip">${Security.escapeHTML(priceText)}</span>
         </div>
+        <p style="font-size: 15px; color: var(--text-main); margin-bottom: 16px; line-height: 1.6;">
+          ${Security.escapeHTML(food.description || "Món ăn ngon đậm đà, được nhiều người yêu thích.")}
+        </p>
+        ${food.notes ? `
+          <div style="background: var(--yellow-light); border-left: 4px solid var(--yellow-butter); padding: 10px 14px; border-radius: 6px; font-size: 13px; color: #855500; margin-bottom: 16px;">
+            <strong>Lưu ý:</strong> ${Security.escapeHTML(food.notes)}
+          </div>
+        ` : ''}
+        <div class="result-venue-box">
+          <div class="venue-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+            ${Security.escapeHTML(food.restaurant || "Quán phục vụ")}
+          </div>
+          <div class="venue-address">${Security.escapeHTML(food.address || "Chưa cập nhật địa chỉ")} ${food.district ? `(${Security.escapeHTML(food.district)})` : ""}</div>
+        </div>
+        ${mapsBtnHtml}
       `;
-      container.appendChild(card);
-    });
-  } else {
-    container.innerHTML = `
-      <div style="padding:14px; background:rgba(255,255,255,0.03); border-radius:12px; font-size:0.85rem; color:var(--text-muted);">
-        Chưa có quán chỉ định sẵn trong cơ sở dữ liệu. Tìm kiếm quán chuẩn vị gần nhất:
-        <div style="margin-top:8px;">
-          <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(food.name + ' ngon Hà Nội')}" target="_blank" rel="noopener noreferrer" class="btn-link-action btn-link-maps">
-            <span>🔍 Mở Google Maps tìm "${escapeSafe(food.name)}"</span>
-          </a>
-        </div>
-      </div>
-    `;
-  }
 
-  document.getElementById('resultModal').style.display = 'flex';
-}
+      this.dom.modal.classList.add("active");
+    },
 
-function shareInvitation() {
-  if (!winningFood) return;
-  const text = `🍜 Ê đi ăn không? Cỗ máy Vị Hà Nội 3D vừa chọn ra món cực phẩm: *${winningFood.name}*!\n💰 Giá khoảng: ${winningFood.priceDisplay}\n📍 Khu vực: ${winningFood.primaryArea}\nLên đồ ghé quán ngay nhé!`;
+    openFavoritesModal() {
+      this.dom.modalTitle.textContent = `Món Đã Thích (${state.favorites.length})`;
+      if (state.favorites.length === 0) {
+        this.dom.modalBody.innerHTML = `
+          <div class="state-box">
+            <p class="state-desc">Bạn chưa thả tim món ăn nào. Hãy bấm biểu tượng trái tim ở các món ăn để lưu lại nhé!</p>
+          </div>
+        `;
+      } else {
+        const listHtml = state.favorites.map(f => `
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border-color);">
+            <div>
+              <h4 style="font-size: 15px; margin-bottom: 2px;">${Security.escapeHTML(f.name)}</h4>
+              <span style="font-size: 12px; color: var(--text-muted);">${Security.escapeHTML(f.group)} ${f.district ? '• ' + Security.escapeHTML(f.district) : ''}</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn-sub btn-quick-pick" data-id="${Security.escapeHTML(f.id)}" style="padding: 6px 12px; font-size: 12px;">Xem</button>
+              <button class="btn-sub btn-remove-fav" data-id="${Security.escapeHTML(f.id)}" style="padding: 6px 10px; color: var(--primary);">Xóa</button>
+            </div>
+          </div>
+        `).join("");
+        this.dom.modalBody.innerHTML = listHtml;
+      }
+      this.dom.modal.classList.add("active");
+    },
 
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).then(() => {
-      alert('Đã sao chép lời mời vào bộ nhớ tạm! Bạn có thể dán vào Zalo/Messenger rủ bạn bè ngay 🎉');
-    }).catch(() => {
-      prompt('Sao chép lời mời dưới đây:', text);
-    });
-  } else {
-    prompt('Sao chép lời mời dưới đây:', text);
-  }
-}
+    openHistoryModal() {
+      this.dom.modalTitle.textContent = "Lịch Sử Chọn Món";
+      if (state.history.length === 0) {
+        this.dom.modalBody.innerHTML = `
+          <div class="state-box">
+            <p class="state-desc">Bạn chưa quay món nào hôm nay. Hãy bấm "Chọn món cho tôi" để bắt đầu!</p>
+          </div>
+        `;
+      } else {
+        const listHtml = `
+          <div style="text-align: right; margin-bottom: 10px;">
+            <button id="btn-clear-history" style="font-size: 12px; color: var(--primary); text-decoration: underline;">Xóa toàn bộ lịch sử</button>
+          </div>
+          <div>
+            ${state.history.map(h => `
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--border-color);">
+                <div>
+                  <h4 style="font-size: 14px;">${Security.escapeHTML(h.name)}</h4>
+                  <span style="font-size: 12px; color: var(--text-muted);">${Security.escapeHTML(h.restaurant || h.group)} • ${Security.escapeHTML(h.time)}</span>
+                </div>
+                <button class="btn-sub btn-quick-pick" data-id="${Security.escapeHTML(h.id)}" style="padding: 4px 10px; font-size: 12px;">Chi tiết</button>
+              </div>
+            `).join("")}
+          </div>
+        `;
+        this.dom.modalBody.innerHTML = listHtml;
+      }
+      this.dom.modal.classList.add("active");
+    },
 
-// =========================================================================
-// 10. DANH SÁCH YÊU THÍCH (WISHLIST) & CẢM BIẾN LẮC ĐIỆN THOẠI
-// =========================================================================
-function loadFavorites() {
-  try {
-    favorites = JSON.parse(localStorage.getItem('hanoi_food_favorites') || '[]');
-    updateFavoriteCountUI();
-  } catch (e) {
-    favorites = [];
-  }
-}
+    closeModal() {
+      this.dom.modal.classList.remove("active");
+    }
+  };
 
-function updateFavoriteCountUI() {
-  const badge = document.getElementById('favCount');
-  if (badge) badge.textContent = favorites.length;
-}
+  // 10. APP CONTROLLER & EVENTS BINDING
+  const App = {
+    async init() {
+      UI.initElements();
+      UI.renderSkeleton();
 
-function toggleWinningFoodFavorite() {
-  if (!winningFood) return;
-  const existsIdx = favorites.findIndex(f => f.name === winningFood.name);
+      // Khôi phục favorites & history từ LocalStorage
+      state.favorites = Storage.get(CONFIG.STORAGE_KEYS.FAVORITES, []);
+      state.history = Storage.get(CONFIG.STORAGE_KEYS.HISTORY, []);
+      UI.updateFavBadge();
 
-  if (existsIdx >= 0) {
-    favorites.splice(existsIdx, 1);
-  } else {
-    favorites.unshift({
-      name: winningFood.name,
-      category: winningFood.category,
-      price: winningFood.priceDisplay,
-      primaryArea: winningFood.primaryArea
-    });
-  }
+      // Khởi động Three.js Scene
+      ThreeScene.init();
 
-  localStorage.setItem('hanoi_food_favorites', JSON.stringify(favorites));
-  updateFavoriteCountUI();
-  updateFavoriteButtonState(winningFood);
-}
+      // Gắn sự kiện giao diện
+      this.bindEvents();
 
-function updateFavoriteButtonState(food) {
-  const isFav = favorites.some(f => f.name === food.name);
-  const icon = document.getElementById('favIcon');
-  if (icon) {
-    icon.textContent = isFav ? '❤️' : '🤍';
-  }
-}
+      // Nạp dữ liệu từ Google Sheets Backend
+      try {
+        state.isLoading = true;
+        const res = await ApiClient.fetchFoods();
+        state.foods = res.data || [];
+        state.filteredFoods = state.foods.slice();
 
-function openWishlistModal() {
-  const container = document.getElementById('wishlistContainer');
-  if (favorites.length === 0) {
-    container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:30px;">Bạn chưa lưu món yêu thích nào. Hãy bấm "Thích" sau khi mở nắp nhé!</p>';
-  } else {
-    container.innerHTML = favorites.map((item, idx) => `
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.06);">
-        <div>
-          <div style="font-weight:700; color:#fff; font-size:0.95rem;">${escapeSafe(item.name)}</div>
-          <div style="font-size:0.75rem; color:var(--text-muted);">${escapeSafe(item.category)} • ${escapeSafe(item.price)}</div>
-        </div>
-        <button onclick="removeFavoriteItem(${idx})" style="background:transparent; border:none; color:var(--accent); font-size:1.1rem; cursor:pointer;">✕</button>
-      </div>
-    `).join('');
-  }
-  document.getElementById('wishlistModal').style.display = 'flex';
-}
+        // Lấy bộ filter dynamic
+        this.extractFiltersMeta(state.foods);
+        UI.populateFilterOptions();
+        UI.renderFoodsList(state.filteredFoods);
 
-window.removeFavoriteItem = function(idx) {
-  favorites.splice(idx, 1);
-  localStorage.setItem('hanoi_food_favorites', JSON.stringify(favorites));
-  updateFavoriteCountUI();
-  openWishlistModal();
-};
+      } catch (err) {
+        UI.dom.foodsGrid.innerHTML = `
+          <div class="state-box" style="grid-column: 1 / -1;">
+            <div class="state-icon" style="background: #FFE5E0; color: #D9381E;">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            </div>
+            <h3 class="state-title">Chưa kết nối được với Google Sheets</h3>
+            <p class="state-desc">${Security.escapeHTML(err.message)}</p>
+            <button class="btn-main" onclick="location.reload()" style="margin: 0 auto;">Thử lại</button>
+          </div>
+        `;
+      } finally {
+        state.isLoading = false;
+      }
+    },
 
-// Cảm biến rung lắc điện thoại (Shake to Reveal)
-function setupMotionSensors() {
-  if (window.DeviceMotionEvent) {
-    let lastX, lastY, lastZ;
-    let lastUpdate = 0;
-    const SHAKE_THRESHOLD = 800;
+    extractFiltersMeta(foods) {
+      const gSet = new Set();
+      const pSet = new Set();
+      const dSet = new Set();
 
-    window.addEventListener('devicemotion', (event) => {
-      const current = event.accelerationIncludingGravity;
-      if (!current) return;
+      foods.forEach(f => {
+        if (f.group) gSet.add(f.group);
+        if (f.district) dSet.add(f.district);
+        if (f.purposes) f.purposes.forEach(p => pSet.add(p));
+      });
 
-      const curTime = performance.now();
-      if ((curTime - lastUpdate) > 100) {
-        const diffTime = curTime - lastUpdate;
-        lastUpdate = curTime;
+      state.filtersMeta.groups = Array.from(gSet).sort();
+      state.filtersMeta.purposes = Array.from(pSet).sort();
+      state.filtersMeta.districts = Array.from(dSet).sort();
+    },
 
-        const speed = Math.abs(current.x + current.y + current.z - lastX - lastY - lastZ) / diffTime * 10000;
-        if (speed > SHAKE_THRESHOLD) {
-          if (!isSpinning) {
-            launchClocheReveal();
+    bindEvents() {
+      // 1. Nút Random chính & Nút "Đổi món khác"
+      const handleSpin = () => {
+        if (state.foods.length === 0) {
+          showToast("Đang tải dữ liệu, vui lòng đợi giây lát...", "info");
+          return;
+        }
+
+        // Tạo hiệu ứng lắc xúc xắc / roll nhanh
+        UI.dom.btnHeroSpin.disabled = true;
+        UI.dom.btnHeroSpin.querySelector("span").textContent = "Đang chọn món ngon...";
+
+        setTimeout(() => {
+          const picked = FoodEngine.spinRandom();
+          UI.dom.btnHeroSpin.disabled = false;
+          UI.dom.btnHeroSpin.querySelector("span").textContent = "Chọn món cho tôi";
+
+          if (picked) {
+            UI.displayRandomResult(picked);
+            showToast(`Đã chọn: ${picked.name}!`, "success");
+          } else {
+            showToast("Không có món nào phù hợp với các tiêu chí này. Hãy nới lỏng bộ lọc nhé!", "error");
+          }
+        }, 500);
+      };
+
+      UI.dom.btnHeroSpin.addEventListener("click", handleSpin);
+      UI.dom.btnSpinAgain.addEventListener("click", handleSpin);
+
+      // 2. Filter change events
+      const onFilterChange = () => {
+        state.activeFilters.purpose = UI.dom.filterPurpose.value;
+        state.activeFilters.group = UI.dom.filterGroup.value;
+        state.activeFilters.district = UI.dom.filterDistrict.value;
+        state.activeFilters.maxBudget = UI.dom.filterBudget.value;
+        state.activeFilters.excludeRecent = UI.dom.chkExcludeRecent.checked;
+        this.applyFrontendFilters();
+      };
+
+      UI.dom.filterPurpose.addEventListener("change", onFilterChange);
+      UI.dom.filterGroup.addEventListener("change", onFilterChange);
+      UI.dom.filterDistrict.addEventListener("change", onFilterChange);
+      UI.dom.filterBudget.addEventListener("change", onFilterChange);
+      UI.dom.chkExcludeRecent.addEventListener("change", onFilterChange);
+
+      // Reset filters
+      UI.dom.btnResetFilters.addEventListener("click", () => {
+        UI.dom.filterPurpose.value = "all";
+        UI.dom.filterGroup.value = "all";
+        UI.dom.filterDistrict.value = "all";
+        UI.dom.filterBudget.value = "all";
+        UI.dom.searchBox.value = "";
+        UI.dom.chkExcludeRecent.checked = true;
+        state.activeFilters = {
+          purpose: "all",
+          group: "all",
+          district: "all",
+          maxBudget: "all",
+          keyword: "",
+          excludeRecent: true
+        };
+        this.applyFrontendFilters();
+        showToast("Đã đặt lại tất cả bộ lọc", "info");
+      });
+
+      // 3. Search box với debounce
+      let searchDebounceTimer = null;
+      UI.dom.searchBox.addEventListener("input", (e) => {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => {
+          state.activeFilters.keyword = e.target.value;
+          this.applyFrontendFilters();
+        }, 250);
+      });
+
+      // 4. Scroll to explore
+      UI.dom.btnExploreScroll.addEventListener("click", () => {
+        document.getElementById("explore-view").scrollIntoView({ behavior: "smooth" });
+      });
+
+      // 5. Thích / Bỏ thích từ kết quả Random
+      UI.dom.btnToggleFavRes.addEventListener("click", () => {
+        if (!state.currentFood) return;
+        this.toggleFavorite(state.currentFood);
+        const isFav = state.favorites.some(f => f.id === state.currentFood.id);
+        UI.updateFavIconState(UI.dom.btnToggleFavRes, isFav);
+      });
+
+      // 6. Chia sẻ kết quả qua Web Share API hoặc Clipboard
+      UI.dom.btnShareRes.addEventListener("click", async () => {
+        if (!state.currentFood) return;
+        const f = state.currentFood;
+        const shareData = {
+          title: `Hôm nay ăn: ${f.name}!`,
+          text: `Mình vừa chọn được món "${f.name}" tại ${f.restaurant || "quán ngon gần đây"} qua ứng dụng Ăn Gì Đây?`,
+          url: window.location.href
+        };
+
+        if (navigator.share) {
+          try {
+            await navigator.share(shareData);
+          } catch (_) {
+            // Người dùng hủy chia sẻ
+          }
+        } else {
+          // Fallback copy vào clipboard
+          try {
+            await navigator.clipboard.writeText(`${shareData.title} - ${shareData.text} \nXem tại: ${shareData.url}`);
+            showToast("Đã sao chép nội dung gợi ý vào bộ nhớ tạm!", "success");
+          } catch (e) {
+            showToast("Trình duyệt không hỗ trợ chia sẻ tự động.", "error");
           }
         }
-        lastX = current.x;
-        lastY = current.y;
-        lastZ = current.z;
+      });
+
+      // 7. Click events trên danh sách món ăn (Ủy quyền sự kiện)
+      UI.dom.foodsGrid.addEventListener("click", (e) => {
+        const detailBtn = e.target.closest(".btn-card-detail");
+        if (detailBtn) {
+          const id = detailBtn.getAttribute("data-id");
+          const food = state.foods.find(item => item.id === id);
+          if (food) UI.openFoodModal(food);
+          return;
+        }
+
+        const favBtn = e.target.closest(".btn-card-fav");
+        if (favBtn) {
+          const id = favBtn.getAttribute("data-id");
+          const food = state.foods.find(item => item.id === id);
+          if (food) {
+            this.toggleFavorite(food);
+            const isFav = state.favorites.some(f => f.id === food.id);
+            favBtn.style.color = isFav ? "var(--primary)" : "var(--text-light)";
+            favBtn.querySelector("svg").setAttribute("fill", isFav ? "currentColor" : "none");
+          }
+        }
+      });
+
+      // 8. Modals: Favorites & History
+      UI.dom.btnOpenFavorites.addEventListener("click", () => UI.openFavoritesModal());
+      UI.dom.btnOpenHistory.addEventListener("click", () => UI.openHistoryModal());
+      UI.dom.modalCloseBtn.addEventListener("click", () => UI.closeModal());
+      UI.dom.modal.addEventListener("click", (e) => {
+        if (e.target === UI.dom.modal) UI.closeModal();
+      });
+
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && UI.dom.modal.classList.contains("active")) {
+          UI.closeModal();
+        }
+      });
+
+      // Thao tác trong Modal (Xóa món yêu thích / Chi tiết món từ modal)
+      UI.dom.modalBody.addEventListener("click", (e) => {
+        const removeFavBtn = e.target.closest(".btn-remove-fav");
+        if (removeFavBtn) {
+          const id = removeFavBtn.getAttribute("data-id");
+          const food = state.foods.find(f => f.id === id);
+          if (food) {
+            this.toggleFavorite(food);
+            UI.openFavoritesModal(); // Render lại modal
+          }
+          return;
+        }
+
+        const quickPickBtn = e.target.closest(".btn-quick-pick");
+        if (quickPickBtn) {
+          const id = quickPickBtn.getAttribute("data-id");
+          const food = state.foods.find(f => f.id === id);
+          if (food) {
+            UI.closeModal();
+            UI.openFoodModal(food);
+          }
+          return;
+        }
+
+        const clearHistoryBtn = e.target.closest("#btn-clear-history");
+        if (clearHistoryBtn) {
+          state.history = [];
+          Storage.set(CONFIG.STORAGE_KEYS.HISTORY, []);
+          UI.openHistoryModal();
+          showToast("Đã xóa toàn bộ lịch sử", "info");
+        }
+      });
+
+      // 9. Mobile Bottom Nav Tabs
+      UI.dom.navTabRandom.addEventListener("click", () => {
+        this.switchTab(UI.dom.navTabRandom);
+        document.getElementById("hero-view").scrollIntoView({ behavior: "smooth" });
+      });
+      UI.dom.navTabExplore.addEventListener("click", () => {
+        this.switchTab(UI.dom.navTabExplore);
+        document.getElementById("explore-view").scrollIntoView({ behavior: "smooth" });
+      });
+      UI.dom.navTabFav.addEventListener("click", () => {
+        this.switchTab(UI.dom.navTabFav);
+        UI.openFavoritesModal();
+      });
+      UI.dom.navTabHist.addEventListener("click", () => {
+        this.switchTab(UI.dom.navTabHist);
+        UI.openHistoryModal();
+      });
+    },
+
+    switchTab(activeBtn) {
+      document.querySelectorAll(".nav-tab-btn").forEach(btn => btn.classList.remove("active"));
+      activeBtn.classList.add("active");
+    },
+
+    toggleFavorite(food) {
+      const index = state.favorites.findIndex(f => f.id === food.id);
+      if (index > -1) {
+        state.favorites.splice(index, 1);
+        showToast(`Đã bỏ thích món ${food.name}`, "info");
+      } else {
+        state.favorites.push({
+          id: food.id,
+          name: food.name,
+          group: food.group,
+          district: food.district
+        });
+        showToast(`Đã thêm "${food.name}" vào yêu thích!`, "success");
       }
-    }, false);
-  }
-}
+      Storage.set(CONFIG.STORAGE_KEYS.FAVORITES, state.favorites);
+      UI.updateFavBadge();
+    },
 
-// =========================================================================
-// 11. QUẢN LÝ LỊCH SỬ LOCAL STORAGE
-// =========================================================================
-function recordHistory(food) {
-  try {
-    let hist = JSON.parse(localStorage.getItem('hanoi_food_history') || '[]');
-    hist.unshift({
-      name: food.name,
-      category: food.category,
-      price: food.priceDisplay,
-      time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-    });
-    if (hist.length > 25) hist = hist.slice(0, 25);
-    localStorage.setItem('hanoi_food_history', JSON.stringify(hist));
-  } catch (e) {}
-}
+    applyFrontendFilters() {
+      const f = state.activeFilters;
+      let result = state.foods.slice();
 
-function openHistoryModal() {
-  renderHistoryList();
-  document.getElementById('historyModal').style.display = 'flex';
-}
-
-function renderHistoryList() {
-  const container = document.getElementById('historyListContainer');
-  let hist = [];
-  try {
-    hist = JSON.parse(localStorage.getItem('hanoi_food_history') || '[]');
-  } catch (e) {}
-
-  if (hist.length === 0) {
-    container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:30px;">Chưa có lịch sử mở nắp món nào.</p>';
-    return;
-  }
-
-  container.innerHTML = hist.map(item => `
-    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.06);">
-      <div>
-        <div style="font-weight:700; color:#fff; font-size:0.92rem;">${escapeSafe(item.name)}</div>
-        <div style="font-size:0.75rem; color:var(--text-muted);">${escapeSafe(item.category)} • ${escapeSafe(item.price)}</div>
-      </div>
-      <span style="font-size:0.75rem; color:var(--gold); font-weight:600;">${escapeSafe(item.time)}</span>
-    </div>
-  `).join('');
-}
-
-function fireConfetti() {
-  if (typeof confetti === 'function') {
-    confetti({
-      particleCount: 100,
-      spread: 75,
-      origin: { y: 0.65 }
-    });
-  }
-}
-
-function handleWindowResize() {
-  if (!camera || !renderer) return;
-  const container = document.getElementById('arenaContainer');
-  const width = container.clientWidth;
-  const height = container.clientHeight;
-  camera.aspect = width / height;
-  camera.updateProjectionMatrix();
-  renderer.setSize(width, height);
-}
-
-function escapeSafe(str) {
-  if (!str) return '';
-  return str.toString()
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-// =========================================================================
-// 12. DỮ LIỆU DỰ PHÒNG CHUẨN XÁC 20+ ĐẶC SẢN NỔI TIẾNG HÀ NỘI
-// =========================================================================
-function getFallBackHanoiDataset() {
-  return {
-    categories: ['Bún / Phở', 'Bánh truyền thống', 'Ăn vặt phố cổ', 'Đặc sản Hà Nội', 'Món chay thanh tịnh'],
-    districts: ['Ba Đình', 'Cầu Giấy', 'Đống Đa', 'Hai Bà Trưng', 'Hoàn Kiếm', 'Tây Hồ', 'Thanh Xuân', 'Long Biên'],
-    foods: [
-      {
-        id: '1',
-        name: 'Phở Bò Tái Lăn',
-        category: 'Bún / Phở',
-        areas: ['Hai Bà Trưng', 'Hoàn Kiếm', 'Đống Đa'],
-        primaryArea: 'Hai Bà Trưng, Hoàn Kiếm, Đống Đa',
-        minPrice: 65000,
-        maxPrice: 90000,
-        price: 75000,
-        priceDisplay: '65.000 đ – 90.000 đ',
-        mealTime: 'Sáng, Trưa, Tối',
-        mood: 'Mọi dịp, Đi 1 mình',
-        isVegetarian: false,
-        tags: 'pho, bo, tai lan',
-        description: 'Bò xào lửa lớn thơm lừng mùi tỏi đập dập, nước dùng đậm đà béo ngậy đặc trưng phố Lò Đúc.',
-        restaurants: [{ name: 'Phở Thìn Lò Đúc', address: '13 Lò Đúc', district: 'Hai Bà Trưng', priceRange: '65k - 90k', mapsUrl: 'https://maps.google.com' }]
-      },
-      {
-        id: '2',
-        name: 'Bún Chả Nướng Than Hoa',
-        category: 'Bún / Phở',
-        areas: ['Hoàn Kiếm', 'Ba Đình'],
-        primaryArea: 'Hoàn Kiếm, Ba Đình',
-        minPrice: 50000,
-        maxPrice: 80000,
-        price: 65000,
-        priceDisplay: '50.000 đ – 80.000 đ',
-        mealTime: 'Trưa',
-        mood: 'Hẹn hò, Bạn bè',
-        isVegetarian: false,
-        tags: 'bun cha, thit nuong',
-        description: 'Chả miếng chả băm nướng xém cạnh trên than hoa đượm hồng, chấm nước mắm giấm tỏi đu đủ chua ngọt.',
-        restaurants: [{ name: 'Bún Chả Đắc Kim', address: '1 Hàng Mành', district: 'Hoàn Kiếm', priceRange: '60k - 90k', mapsUrl: 'https://maps.google.com' }]
-      },
-      {
-        id: '3',
-        name: 'Chả Cá Lã Vọng',
-        category: 'Đặc sản Hà Nội',
-        areas: ['Hoàn Kiếm', 'Tây Hồ'],
-        primaryArea: 'Hoàn Kiếm, Tây Hồ',
-        minPrice: 150000,
-        maxPrice: 220000,
-        price: 185000,
-        priceDisplay: '150.000 đ – 220.000 đ',
-        mealTime: 'Trưa, Tối',
-        mood: 'Hẹn hò, Tiếp khách, Tụ tập',
-        isVegetarian: false,
-        tags: 'cha ca, la vong, ca lang',
-        description: 'Cá lăng chiên vàng ươm cùng thì là, hành hoa ngập chảo mỡ sôi xèo xèo, ăn kèm bún, đậu phộng và mắm tôm.',
-        restaurants: [{ name: 'Chả Cá Thăng Long', address: '19 Đường Thành', district: 'Hoàn Kiếm', priceRange: '150k - 200k', mapsUrl: 'https://maps.google.com' }]
-      },
-      {
-        id: '4',
-        name: 'Bún Đậu Mẹt Mắm Tôm',
-        category: 'Bún / Phở',
-        areas: ['Đống Đa', 'Hoàn Kiếm', 'Cầu Giấy'],
-        primaryArea: 'Đống Đa, Hoàn Kiếm, Cầu Giấy',
-        minPrice: 35000,
-        maxPrice: 65000,
-        price: 50000,
-        priceDisplay: '35.000 đ – 65.000 đ',
-        mealTime: 'Trưa, Tối',
-        mood: 'Tụ tập, Bạn bè',
-        isVegetarian: false,
-        tags: 'bun dau, mam tom, cha com',
-        description: 'Đậu Mơ lướt ván giòn vỏ ngậy béo, chả cốm dẻo thơm, mắm tôm Thanh Hóa đánh sủi bọt quất ớt cay xè.',
-        restaurants: [{ name: 'Bún Đậu Trung Hương', address: '49 Ngõ Phất Lộc', district: 'Hoàn Kiếm', priceRange: '45k - 70k', mapsUrl: 'https://maps.google.com' }]
-      },
-      {
-        id: '5',
-        name: 'Bún Thang Phố Cổ',
-        category: 'Bún / Phở',
-        areas: ['Hoàn Kiếm', 'Ba Đình'],
-        primaryArea: 'Hoàn Kiếm, Ba Đình',
-        minPrice: 50000,
-        maxPrice: 70000,
-        price: 60000,
-        priceDisplay: '50.000 đ – 70.000 đ',
-        mealTime: 'Sáng, Trưa',
-        mood: 'Nhẹ nhàng, Mọi dịp',
-        isVegetarian: false,
-        tags: 'bun thang, pho co, thanh lich',
-        description: 'Được mệnh danh là "bông hoa ngũ sắc", gồm giò lụa, trứng tráng mỏng, thịt gà xé và củ cải dầm trên nền nước dùng tôm ngọt trong vắt.',
-        restaurants: [{ name: 'Bún Thang Bà Đức', address: '48 Cầu Gỗ', district: 'Hoàn Kiếm', priceRange: '50k - 70k', mapsUrl: 'https://maps.google.com' }]
-      },
-      {
-        id: '6',
-        name: 'Bún Ốc Nguội Giấm Bỗng',
-        category: 'Bún / Phở',
-        areas: ['Hoàn Kiếm', 'Hai Bà Trưng'],
-        primaryArea: 'Hoàn Kiếm, Hai Bà Trưng',
-        minPrice: 40000,
-        maxPrice: 60000,
-        price: 50000,
-        priceDisplay: '40.000 đ – 60.000 đ',
-        mealTime: 'Trưa, Chiều',
-        mood: 'Ăn vặt, Nhẹ nhàng',
-        isVegetarian: false,
-        tags: 'bun oc, giam bong',
-        description: 'Ốc nhồi giòn sần sật trong nước dùng chua thanh dìu dịu của giấm bỗng nếp, chấm bún lá con nhỏ xinh.',
-        restaurants: [{ name: 'Bún Ốc Nguội Ô Quan Chưởng', address: '1 Hàng Chiếu', district: 'Hoàn Kiếm', priceRange: '40k - 60k', mapsUrl: 'https://maps.google.com' }]
-      },
-      {
-        id: '7',
-        name: 'Ngan Cháy Tỏi Phố Hàng Thiếc',
-        category: 'Đặc sản Hà Nội',
-        areas: ['Hoàn Kiếm', 'Đống Đa'],
-        primaryArea: 'Hoàn Kiếm, Đống Đa',
-        minPrice: 120000,
-        maxPrice: 200000,
-        price: 160000,
-        priceDisplay: '120.000 đ – 200.000 đ',
-        mealTime: 'Trưa, Tối, Đêm',
-        mood: 'Tụ tập, Nhậu, Bạn bè',
-        isVegetarian: false,
-        tags: 'ngan chay toi, nhau, dac san',
-        description: 'Thịt ngan mềm ngọt tẩm ướp đậm đà xào xém cùng những tép tỏi ta phi vàng giòn ruộm thơm nức mũi.',
-        restaurants: [{ name: 'Ngan Cháy Tỏi Thủy Béo', address: '51 Hàng Lược', district: 'Hoàn Kiếm', priceRange: '120k - 200k', mapsUrl: 'https://maps.google.com' }]
-      },
-      {
-        id: '8',
-        name: 'Phở Cuốn Ngũ Xã',
-        category: 'Đặc sản Hà Nội',
-        areas: ['Ba Đình', 'Tây Hồ'],
-        primaryArea: 'Ba Đình, Tây Hồ',
-        minPrice: 60000,
-        maxPrice: 90000,
-        price: 75000,
-        priceDisplay: '60.000 đ – 90.000 đ',
-        mealTime: 'Trưa, Tối',
-        mood: 'Hẹn hò, Tụ tập',
-        isVegetarian: false,
-        tags: 'pho cuon, ngu xa',
-        description: 'Lá phở bản vuông trắng muốt cuộn chặt thịt bò xào lửa lớn cùng rau thơm non mượt chấm mắm ớt cay cay.',
-        restaurants: [{ name: 'Phở Cuốn Hưng Bền', address: '33 Ngũ Xã', district: 'Ba Đình', priceRange: '60k - 100k', mapsUrl: 'https://maps.google.com' }]
-      },
-      {
-        id: '9',
-        name: 'Lẩu Riêu Cua Bắp Bò Sườn Sụn',
-        category: 'Đặc sản Hà Nội',
-        areas: ['Đống Đa', 'Hai Bà Trưng', 'Cầu Giấy'],
-        primaryArea: 'Đống Đa, Hai Bà Trưng, Cầu Giấy',
-        minPrice: 250000,
-        maxPrice: 400000,
-        price: 320000,
-        priceDisplay: '250.000 đ – 400.000 đ',
-        mealTime: 'Tối, Đêm',
-        mood: 'Tụ tập, Nhậu, Gia đình',
-        isVegetarian: false,
-        tags: 'lau rieu, bap bo, suon sun',
-        description: 'Nồi lẩu đầy ắp gạch cua đồng đỏ au, vị chua thanh từ giấm bỗng nếp nhúng cùng bắp bò giòn sần sật và rau sống thái sợi.',
-        restaurants: [{ name: 'Lẩu Riêu Cua Phó Đức Chính', address: '66 Phó Đức Chính', district: 'Ba Đình', priceRange: '250k - 450k', mapsUrl: 'https://maps.google.com' }]
-      },
-      {
-        id: '10',
-        name: 'Bánh Cuốn Nóng Cà Cuống',
-        category: 'Bánh truyền thống',
-        areas: ['Hoàn Kiếm', 'Hai Bà Trưng'],
-        primaryArea: 'Hoàn Kiếm, Hai Bà Trưng',
-        minPrice: 35000,
-        maxPrice: 60000,
-        price: 45000,
-        priceDisplay: '35.000 đ – 60.000 đ',
-        mealTime: 'Sáng, Đêm',
-        mood: 'Đi 1 mình, Nhẹ nhàng',
-        isVegetarian: false,
-        tags: 'banh cuon, ca cuong',
-        description: 'Bánh tráng mỏng tang thấy rõ nhân thịt băm mộc nhĩ giòn rụm, điểm xuyết giọt tinh dầu cà cuống thơm quý hiếm.',
-        restaurants: [{ name: 'Bánh Cuốn Bà Hoành', address: '66 Tô Hiến Thành', district: 'Hai Bà Trưng', priceRange: '40k - 65k', mapsUrl: 'https://maps.google.com' }]
-      },
-      {
-        id: '11',
-        name: 'Bánh Mì Sốt Vang Đình Ngang',
-        category: 'Đặc sản Hà Nội',
-        areas: ['Hoàn Kiếm', 'Đống Đa'],
-        primaryArea: 'Hoàn Kiếm, Đống Đa',
-        minPrice: 45000,
-        maxPrice: 65000,
-        price: 55000,
-        priceDisplay: '45.000 đ – 65.000 đ',
-        mealTime: 'Sáng, Tối, Đêm',
-        mood: 'Đi 1 mình, Bạn bè',
-        isVegetarian: false,
-        tags: 'banh mi, sot vang',
-        description: 'Bò hầm gân mềm sánh quyện hương rượu vang, quế hồi ngào ngạt, chấm bánh mì nóng giòn rụm.',
-        restaurants: [{ name: 'Bánh Mì Sốt Vang Trâm', address: '30 Đình Ngang', district: 'Hoàn Kiếm', priceRange: '50k - 70k', mapsUrl: 'https://maps.google.com' }]
-      },
-      {
-        id: '12',
-        name: 'Nộm Bò Khô Bờ Hồ',
-        category: 'Ăn vặt phố cổ',
-        areas: ['Hoàn Kiếm'],
-        primaryArea: 'Hoàn Kiếm',
-        minPrice: 35000,
-        maxPrice: 50000,
-        price: 40000,
-        priceDisplay: '35.000 đ – 50.000 đ',
-        mealTime: 'Chiều, Tối, Đêm',
-        mood: 'Hẹn hò, Ăn vặt',
-        isVegetarian: false,
-        tags: 'nom, bo kho, bo ho',
-        description: 'Đu đủ nạo giòn mát quyện với bò khô xé cay, lá kinh giới và nước giấm đường ớt tỏi chua cay mặn ngọt đậm đà.',
-        restaurants: [{ name: 'Nộm Long Vi Dung', address: '23 Hồ Hoàn Kiếm', district: 'Hoàn Kiếm', priceRange: '35k - 50k', mapsUrl: 'https://maps.google.com' }]
-      },
-      {
-        id: '13',
-        name: 'Xôi Xéo Mỡ Hành Ruốc Hành Phi',
-        category: 'Bánh truyền thống',
-        areas: ['Hoàn Kiếm', 'Hai Bà Trưng', 'Đống Đa'],
-        primaryArea: 'Hoàn Kiếm, Hai Bà Trưng, Đống Đa',
-        minPrice: 20000,
-        maxPrice: 40000,
-        price: 30000,
-        priceDisplay: '20.000 đ – 40.000 đ',
-        mealTime: 'Sáng',
-        mood: 'Nhanh gọn, Đi 1 mình',
-        isVegetarian: false,
-        tags: 'xoi xeo, mo hanh, an sang',
-        description: 'Hạt xôi nếp cái hoa vàng óng ả bọc trong lá chuối, xắt từng lát đỗ xanh bùi ngậy rưới mỡ gà thơm nức mũi.',
-        restaurants: [{ name: 'Xôi Mây Hàng Bài', address: '35 Lý Thường Kiệt', district: 'Hoàn Kiếm', priceRange: '20k - 40k', mapsUrl: 'https://maps.google.com' }]
-      },
-      {
-        id: '14',
-        name: 'Cà Phê Trứng Giảng',
-        category: 'Ăn vặt phố cổ',
-        areas: ['Hoàn Kiếm', 'Ba Đình'],
-        primaryArea: 'Hoàn Kiếm, Ba Đình',
-        minPrice: 35000,
-        maxPrice: 50000,
-        price: 40000,
-        priceDisplay: '35.000 đ – 50.000 đ',
-        mealTime: 'Sáng, Chiều, Tối',
-        mood: 'Hẹn hò, Thư giãn',
-        isVegetarian: true,
-        tags: 'ca phe trung, do uong, pho co',
-        description: 'Lớp kem trứng đánh bông mịn như mây béo ngậy phủ trên nền cà phê Robusta nguyên chất nóng hổi.',
-        restaurants: [{ name: 'Cafe Giảng', address: '39 Nguyễn Hữu Huân', district: 'Hoàn Kiếm', priceRange: '35k - 50k', mapsUrl: 'https://maps.google.com' }]
-      },
-      {
-        id: '15',
-        name: 'Phở Nấm Chay Thanh Lương',
-        category: 'Món chay thanh tịnh',
-        areas: ['Hoàn Kiếm', 'Tây Hồ', 'Đống Đa'],
-        primaryArea: 'Hoàn Kiếm, Tây Hồ, Đống Đa',
-        minPrice: 40000,
-        maxPrice: 60000,
-        price: 50000,
-        priceDisplay: '40.000 đ – 60.000 đ',
-        mealTime: 'Sáng, Trưa, Tối',
-        mood: 'Thanh tịnh, Ăn chay',
-        isVegetarian: true,
-        tags: 'chay, vegetarian, pho nam',
-        description: 'Nước dùng ninh từ củ quả ngọt lịm tự nhiên, kết hợp nấm hương rừng và đậu hũ non thanh khiết tâm hồn.',
-        restaurants: [{ name: 'Cơm Chay Nàng Tấm', address: '79A Trần Hưng Đạo', district: 'Hoàn Kiếm', priceRange: '50k - 80k', mapsUrl: 'https://maps.google.com' }]
+      // Từ khóa không dấu
+      if (f.keyword) {
+        const normKey = Security.normalizeVietnamese(f.keyword);
+        result = result.filter(item => {
+          const searchContent = Security.normalizeVietnamese(
+            (item.name || "") + " " + (item.group || "") + " " + (item.restaurant || "") + " " + (item.district || "")
+          );
+          return searchContent.includes(normKey);
+        });
       }
-    ]
+
+      // Mục đích
+      if (f.purpose && f.purpose !== "all") {
+        result = result.filter(item => item.purposes && item.purposes.includes(f.purpose));
+      }
+
+      // Nhóm
+      if (f.group && f.group !== "all") {
+        result = result.filter(item => item.group === f.group);
+      }
+
+      // Quận
+      if (f.district && f.district !== "all") {
+        result = result.filter(item => item.district === f.district);
+      }
+
+      // Giá tối đa
+      if (f.maxBudget && f.maxBudget !== "all") {
+        const budgetLimit = parseInt(f.maxBudget, 10);
+        result = result.filter(item => {
+          if (item.minPrice === null && item.maxPrice === null) return true;
+          if (item.minPrice !== null && item.minPrice > budgetLimit) return false;
+          return true;
+        });
+      }
+
+      state.filteredFoods = result;
+      UI.renderFoodsList(state.filteredFoods);
+    }
   };
-}
+
+  // Khởi động toàn bộ ứng dụng khi DOM tải xong
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => App.init());
+  } else {
+    App.init();
+  }
+
+})();
